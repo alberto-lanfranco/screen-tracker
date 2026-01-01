@@ -1,15 +1,14 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.1.1';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
-const TMDB_DEMO_KEY = 'e6176de15e5fb2c2f96aef17b83e44eb'; // Demo key for quick setup
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
-// Get TMDB API key (user's key or demo key)
+// Get TMDB API key from user settings
 function getTmdbApiKey() {
-    return state.settings.tmdbApiKey || TMDB_DEMO_KEY;
+    return state.settings.tmdbApiKey || '';
 }
 
 // Helper functions for rating tags
@@ -572,16 +571,22 @@ async function handleSearch() {
 
     searchResults.innerHTML = '<div class="loading">Searching...</div>';
 
+    // Check if API key is configured
+    const apiKey = getTmdbApiKey();
+    if (!apiKey) {
+        searchResults.innerHTML = '<div class="error-message">Please configure your TMDB API key in Settings. Get a free API key at <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener noreferrer">themoviedb.org/settings/api</a></div>';
+        return;
+    }
+
     try {
         // Search for both movies and TV shows
-        const apiKey = getTmdbApiKey();
         const [moviesResponse, tvResponse] = await Promise.all([
             fetch(`${TMDB_BASE_URL}/search/movie?api_key=${apiKey}&query=${encodeURIComponent(query)}&page=1`),
             fetch(`${TMDB_BASE_URL}/search/tv?api_key=${apiKey}&query=${encodeURIComponent(query)}&page=1`)
         ]);
 
         if (!moviesResponse.ok || !tvResponse.ok) {
-            searchResults.innerHTML = '<div class="error-message">Search failed. Please try again.</div>';
+            searchResults.innerHTML = '<div class="error-message">Search failed. Please check your API key in Settings.</div>';
             return;
         }
 
