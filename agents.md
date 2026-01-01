@@ -40,6 +40,7 @@ state = {
     sortBy: 'dateAdded',      // Sort field: dateAdded, title, year, rating
     sortOrder: 'desc',        // Sort order: asc, desc
     settings: {
+        tmdbApiKey: '',       // User's TMDB API key (optional, falls back to demo key)
         gistId: '',
         apiToken: ''
     },
@@ -81,12 +82,19 @@ state = {
 
 #### Configuration
 ```javascript
-const TMDB_API_KEY = 'e6176de15e5fb2c2f96aef17b83e44eb'; // Demo key
+const TMDB_DEMO_KEY = 'e6176de15e5fb2c2f96aef17b83e44eb'; // Demo key for quick setup
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
+
+// Get TMDB API key (user's key or demo key)
+function getTmdbApiKey() {
+    return state.settings.tmdbApiKey || TMDB_DEMO_KEY;
+}
 ```
 
-**Note**: The demo API key is included for quick setup. For production use, users should get their own free API key from https://www.themoviedb.org/settings/api
+**User Configuration**: Users can provide their own TMDB API key in the Settings tab under "TMDB API Configuration". The app will use the user's key if provided, otherwise it falls back to the demo key. Get a free API key from https://www.themoviedb.org/settings/api
+
+**Settings Storage**: The TMDB API key is stored in `state.settings.tmdbApiKey` and persisted to localStorage under the key `screenTracker_settings`.
 
 #### Search Endpoints
 
@@ -299,7 +307,7 @@ Breaking Bad	tv	2008	1396	https://...	A high school chemistry...	10_stars,drama	
 
 #### Settings Storage
 - localStorage key: `screenTracker_settings`
-- Stores: gistId, apiToken
+- Stores: tmdbApiKey, gistId, apiToken
 - Persists between sessions
 
 ### 5. Cloud Sync Flow
@@ -548,7 +556,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **Version Format**: MAJOR.MINOR.PATCH (e.g., 1.0.0)
 - **Location**: `APP_VERSION` constant in `app.js` and `CACHE_VERSION` in `sw.js`
 - **Display**: Shown in Settings tab under "About" section
-- **Current Version**: 1.0.0
+- **Current Version**: 1.1.0
 - **When to Update**:
   - **MAJOR**: Breaking changes, major redesigns, incompatible data format changes
   - **MINOR**: New features, significant additions (e.g., episode tracking, new views)
@@ -583,6 +591,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
    - Mention any breaking changes or migrations
 
 ### Version History
+- **1.1.0** (2025-01-01): Added user-configurable TMDB API key in Settings. Users can now provide their own TMDB API key instead of relying solely on the demo key. New settings section at the top of Settings tab with API key input field, save button, and status messages. Falls back to demo key if no custom key is provided.
 - **1.0.0** (2025-01-01): Initial release. Complete PWA for tracking movies and TV shows with TMDB API integration, three list states (To Watch, Watching, Watched), 10-star rating system, custom tags, GitHub Gist cloud sync, offline poster caching, and dark-themed monospace UI based on book-tracker architecture.
 
 ## Code Style Guidelines

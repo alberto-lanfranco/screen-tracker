@@ -1,12 +1,16 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
-// This is a demo key - for production, users should get their own from https://www.themoviedb.org/settings/api
-const TMDB_API_KEY = 'e6176de15e5fb2c2f96aef17b83e44eb';
+const TMDB_DEMO_KEY = 'e6176de15e5fb2c2f96aef17b83e44eb'; // Demo key for quick setup
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
+
+// Get TMDB API key (user's key or demo key)
+function getTmdbApiKey() {
+    return state.settings.tmdbApiKey || TMDB_DEMO_KEY;
+}
 
 // Helper functions for rating tags
 function getRatingFromTags(tags) {
@@ -255,6 +259,7 @@ const state = {
     sortBy: 'dateAdded', // dateAdded, title, year, rating
     sortOrder: 'desc', // asc or desc
     settings: {
+        tmdbApiKey: '',
         gistId: '',
         apiToken: ''
     },
@@ -267,6 +272,9 @@ let searchInput;
 let searchResults;
 let navItems;
 let views;
+let tmdbApiKeyInput;
+let saveTmdbSettingsBtn;
+let tmdbStatus;
 let gistIdInput;
 let apiTokenInput;
 let saveSettingsBtn;
@@ -289,6 +297,9 @@ function init() {
     searchResults = document.getElementById('searchResults');
     navItems = document.querySelectorAll('.nav-item');
     views = document.querySelectorAll('.view');
+    tmdbApiKeyInput = document.getElementById('tmdbApiKey');
+    saveTmdbSettingsBtn = document.getElementById('saveTmdbSettings');
+    tmdbStatus = document.getElementById('tmdbStatus');
     gistIdInput = document.getElementById('gistId');
     apiTokenInput = document.getElementById('apiToken');
     saveSettingsBtn = document.getElementById('saveSettings');
@@ -419,6 +430,7 @@ function setupEventListeners() {
     });
 
     // Settings handlers
+    if (saveTmdbSettingsBtn) saveTmdbSettingsBtn.addEventListener('click', saveTmdbSettings);
     if (saveSettingsBtn) saveSettingsBtn.addEventListener('click', saveSettings);
     if (syncNowBtn) syncNowBtn.addEventListener('click', () => syncWithGitHub(true));
 
@@ -562,9 +574,10 @@ async function handleSearch() {
 
     try {
         // Search for both movies and TV shows
+        const apiKey = getTmdbApiKey();
         const [moviesResponse, tvResponse] = await Promise.all([
-            fetch(`${TMDB_BASE_URL}/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}&page=1`),
-            fetch(`${TMDB_BASE_URL}/search/tv?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}&page=1`)
+            fetch(`${TMDB_BASE_URL}/search/movie?api_key=${apiKey}&query=${encodeURIComponent(query)}&page=1`),
+            fetch(`${TMDB_BASE_URL}/search/tv?api_key=${apiKey}&query=${encodeURIComponent(query)}&page=1`)
         ]);
 
         if (!moviesResponse.ok || !tvResponse.ok) {
@@ -1097,6 +1110,7 @@ function loadSettingsFromStorage() {
             state.settings = JSON.parse(stored);
 
             // Populate settings inputs
+            if (tmdbApiKeyInput) tmdbApiKeyInput.value = state.settings.tmdbApiKey || '';
             if (gistIdInput) gistIdInput.value = state.settings.gistId || '';
             if (apiTokenInput) apiTokenInput.value = state.settings.apiToken || '';
         }
@@ -1136,6 +1150,14 @@ function loadSortPreference() {
 }
 
 // Settings functions
+function saveTmdbSettings() {
+    state.settings.tmdbApiKey = tmdbApiKeyInput.value.trim();
+
+    saveSettingsToStorage();
+
+    showTmdbStatus('API key saved successfully', 'success');
+}
+
 function saveSettings() {
     state.settings.gistId = gistIdInput.value.trim();
     state.settings.apiToken = apiTokenInput.value.trim();
@@ -1143,6 +1165,14 @@ function saveSettings() {
     saveSettingsToStorage();
 
     showSyncStatus('Settings saved successfully', 'success');
+}
+
+function showTmdbStatus(message, type = 'info') {
+    tmdbStatus.innerHTML = `
+        <div class="status-message-text">${message}</div>
+        <button class="status-dismiss-btn" onclick="this.parentElement.innerHTML = ''">×</button>
+    `;
+    tmdbStatus.className = `sync-status sync-${type}`;
 }
 
 function showSyncStatus(message, type = 'info') {
