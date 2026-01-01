@@ -918,6 +918,7 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
 
         ${screen.overview ? `<div class="detail-description">${screen.overview}</div>` : ''}
     `;
+    }
 
     // Setup event listeners for detail modal
     setupDetailModalListeners(existingScreen || screen);
