@@ -557,7 +557,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **Version Format**: MAJOR.MINOR.PATCH (e.g., 1.0.0)
 - **Location**: `APP_VERSION` constant in `app.js` and `CACHE_VERSION` in `sw.js`
 - **Display**: Shown in Settings tab under "About" section
-- **Current Version**: 1.1.1
+- **Current Version**: 1.1.2
 - **When to Update**:
   - **MAJOR**: Breaking changes, major redesigns, incompatible data format changes
   - **MINOR**: New features, significant additions (e.g., episode tracking, new views)
@@ -592,6 +592,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
    - Mention any breaking changes or migrations
 
 ### Version History
+- **1.1.2** (2025-01-01): Fixed poster sizing and add button styling to match book-tracker layout. Search result posters now 60x90px (was using wrong class name). Fixed add button styling in detail modal. Changed class from `screen-poster` to `screen-cover` to match CSS. Fixed `.btn-add-book` → `.btn-add-screen` in CSS.
 - **1.1.1** (2025-01-01): Removed non-existent demo API key. TMDB API key is now required - users must provide their own free API key from themoviedb.org/settings/api. Added validation to show error message if API key is not configured. Updated UI to clearly indicate API key is required.
 - **1.1.0** (2025-01-01): Added user-configurable TMDB API key in Settings. New settings section at the top of Settings tab with API key input field, save button, and status messages.
 - **1.0.0** (2025-01-01): Initial release. Complete PWA for tracking movies and TV shows with TMDB API integration, three list states (To Watch, Watching, Watched), 10-star rating system, custom tags, GitHub Gist cloud sync, offline poster caching, and dark-themed monospace UI based on book-tracker architecture.
