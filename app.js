@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.1.2';
+const APP_VERSION = '1.3.0';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -85,6 +85,27 @@ function setListTimestamps(screen, listStatus) {
     }
 
     return screen;
+}
+
+// Update screen metadata
+function updateScreenMetadata(screenId, updates) {
+    const screenIndex = state.screens.findIndex(s => s.id === screenId);
+    if (screenIndex !== -1) {
+        const screen = state.screens[screenIndex];
+
+        // If ID is being changed (due to TMDB ID change), check for duplicates
+        if (updates.id && updates.id !== screenId) {
+            const duplicate = state.screens.find(s => s.id === updates.id);
+            if (duplicate) {
+                alert('⚠️ Screen with this ID already exists');
+                return;
+            }
+        }
+
+        Object.assign(screen, updates);
+        saveToLocalStorage();
+        renderScreens();
+    }
 }
 
 // Function to convert image URL to data URI for offline caching
@@ -690,23 +711,126 @@ function displaySearchResults(results) {
 }
 
 // Show screen detail modal
-function showScreenDetail(screen, source = 'list') {
+function showScreenDetail(screen, source = 'list', editMode = false) {
     currentDetailScreen = screen;
     currentDetailSource = source;
 
     const modal = document.getElementById('screenDetailModal');
     const content = document.getElementById('screenDetailContent');
 
-    const posterUrl = screen.cachedPoster || screen.posterUrl || '';
-    const typeLabel = screen.type === 'movie' ? 'Movie' : (screen.type === 'tv' ? 'TV Show' : 'Unknown');
-    const rating = getRatingFromTags(screen.tags || []);
-    const listStatus = getScreenListStatus(screen);
-
     // Determine if this screen is already in the list
     const existingScreen = state.screens.find(s => s.id === screen.id || (s.tmdbId === screen.tmdbId && s.type === screen.type));
     const isInList = !!existingScreen;
+    const displayScreen = existingScreen || screen;
 
-    content.innerHTML = `
+    const posterUrl = displayScreen.cachedPoster || displayScreen.posterUrl || '';
+    const typeLabel = displayScreen.type === 'movie' ? 'Movie' : (displayScreen.type === 'tv' ? 'TV Show' : 'Unknown');
+    const rating = getRatingFromTags(displayScreen.tags || []);
+    const listStatus = getScreenListStatus(displayScreen);
+
+    // Tags section (shown for all tracked screens)
+    let tagsSection = '';
+    if (isInList) {
+        const allTags = displayScreen.tags || [];
+        const displayTags = allTags.filter(tag => !tag.match(/^\d{2}_stars$/));
+        const tagPills = displayTags.map(tag => `<span class="tag-pill">${tag}<button class="tag-remove" data-tag="${tag}">×</button></span>`).join('');
+
+        tagsSection = `
+            <div class="detail-tags">
+                <label>Tags</label>
+                <div class="tags-container">
+                    ${tagPills}
+                    <div class="tag-input-wrapper">
+                        <input type="text" class="tag-input" placeholder="Add tag..." id="newTagInput">
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Rating section (only for watched screens)
+    let ratingSection = '';
+    if (isInList && listStatus === 'watched') {
+        let stars = '';
+        for (let i = 1; i <= 10; i++) {
+            const filled = i <= rating ? 'filled' : '';
+            stars += `<span class="star ${filled}" data-rating="${i}">★</span>`;
+        }
+        ratingSection = `
+            <div class="detail-rating">
+                <label>Rating</label>
+                <div class="star-rating">${stars}</div>
+            </div>
+        `;
+    }
+
+    // Edit mode HTML
+    if (editMode) {
+        content.innerHTML = `
+            <div class="detail-cover-container">
+                <img src="${posterUrl}" class="detail-cover" alt="${displayScreen.title}">
+                <input type="text" class="edit-input" id="editPosterUrl" value="${displayScreen.posterUrl || ''}" placeholder="Poster URL">
+            </div>
+            <div class="detail-info">
+                <input type="text" class="edit-input edit-title" id="editTitle" value="${displayScreen.title}" placeholder="Title">
+                <select class="edit-input" id="editType">
+                    <option value="movie" ${displayScreen.type === 'movie' ? 'selected' : ''}>Movie</option>
+                    <option value="tv" ${displayScreen.type === 'tv' ? 'selected' : ''}>TV Show</option>
+                </select>
+                <input type="text" class="edit-input" id="editYear" value="${displayScreen.year || ''}" placeholder="Year" style="width: 100px;">
+                <label>Overview:</label>
+                <textarea class="edit-textarea" id="editOverview" placeholder="Overview">${displayScreen.overview || ''}</textarea>
+                ${tagsSection}
+                ${ratingSection}
+                <div class="detail-actions" style="margin-top: 16px;">
+                    <button class="btn btn-small" id="saveEdit">Save</button>
+                    <button class="btn btn-small" id="cancelEdit">Cancel</button>
+                </div>
+            </div>
+        `;
+
+        // Add event handlers for Save and Cancel buttons
+        const saveBtn = document.getElementById('saveEdit');
+        const cancelBtn = document.getElementById('cancelEdit');
+
+        if (saveBtn) {
+            saveBtn.addEventListener('click', async () => {
+                const updates = {
+                    title: document.getElementById('editTitle').value.trim() || displayScreen.title,
+                    type: document.getElementById('editType').value,
+                    year: document.getElementById('editYear').value.trim() || displayScreen.year,
+                    posterUrl: document.getElementById('editPosterUrl').value.trim() || displayScreen.posterUrl,
+                    overview: document.getElementById('editOverview').value.trim() || displayScreen.overview
+                };
+
+                // Update the screen metadata
+                updateScreenMetadata(displayScreen.id, updates);
+
+                // If poster URL changed, update cached poster
+                if (updates.posterUrl !== displayScreen.posterUrl) {
+                    const updatedScreen = state.screens.find(s => s.id === displayScreen.id);
+                    if (updatedScreen) {
+                        await cacheScreenPoster(updatedScreen);
+                        saveToLocalStorage();
+                    }
+                }
+
+                // Refresh the modal with updated data
+                const updatedScreen = state.screens.find(s => s.id === displayScreen.id);
+                if (updatedScreen) {
+                    showScreenDetail(updatedScreen, source, false);
+                }
+            });
+        }
+
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => {
+                showScreenDetail(displayScreen, source, false);
+            });
+        }
+    } else {
+        // Normal view HTML
+        content.innerHTML = `
         <div class="detail-header-layout">
             <div class="detail-cover-wrapper">
                 ${posterUrl ? `<img src="${posterUrl}" class="detail-cover" alt="${screen.title}">` : '<div class="detail-cover"></div>'}
@@ -717,34 +841,6 @@ function showScreenDetail(screen, source = 'list') {
                 ${screen.tmdbId ? `<div class="detail-tmdb-id">TMDB ID: ${screen.tmdbId}</div>` : ''}
             </div>
         </div>
-
-        ${screen.overview ? `<div class="detail-description">${screen.overview}</div>` : ''}
-
-        ${isInList ? `
-            <div class="detail-rating">
-                <label>Rating</label>
-                <div class="star-rating" data-rating="${rating || 0}">
-                    ${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => `
-                        <span class="star ${rating && i <= rating ? 'filled' : ''}" data-value="${i}">★</span>
-                    `).join('')}
-                </div>
-            </div>
-
-            <div class="detail-tags">
-                <label>Tags</label>
-                <div class="tags-container">
-                    ${(existingScreen.tags || []).filter(t => !t.match(/^\d{2}_stars$/)).map(tag => `
-                        <span class="tag-pill">
-                            ${tag}
-                            <button class="tag-remove" data-tag="${tag}">×</button>
-                        </span>
-                    `).join('')}
-                    <div class="tag-input-wrapper">
-                        <input type="text" class="tag-input" placeholder="Add tag..." id="newTagInput">
-                    </div>
-                </div>
-            </div>
-        ` : ''}
 
         <div class="action-group-pill">
             ${isInList ? `
@@ -768,6 +864,12 @@ function showScreenDetail(screen, source = 'list') {
                         <span>Watched</span>
                     </button>
                 </div>
+                <button class="btn-edit-circle" id="editScreen" title="Edit">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                </button>
                 <button class="btn-delete-circle" id="deleteScreen" title="Delete">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="3 6 5 6 21 6"></polyline>
@@ -785,6 +887,36 @@ function showScreenDetail(screen, source = 'list') {
                 </button>
             `}
         </div>
+
+        ${isInList ? `
+            <div class="detail-tags">
+                <label>Tags</label>
+                <div class="tags-container">
+                    ${(existingScreen.tags || []).filter(t => !t.match(/^\d{2}_stars$/)).map(tag => `
+                        <span class="tag-pill">
+                            ${tag}
+                            <button class="tag-remove" data-tag="${tag}">×</button>
+                        </span>
+                    `).join('')}
+                    <div class="tag-input-wrapper">
+                        <input type="text" class="tag-input" placeholder="Add tag..." id="newTagInput">
+                    </div>
+                </div>
+            </div>
+        ` : ''}
+
+        ${isInList && listStatus === 'watched' ? `
+            <div class="detail-rating">
+                <label>Rating</label>
+                <div class="star-rating" data-rating="${rating || 0}">
+                    ${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => `
+                        <span class="star ${rating && i <= rating ? 'filled' : ''}" data-value="${i}">★</span>
+                    `).join('')}
+                </div>
+            </div>
+        ` : ''}
+
+        ${screen.overview ? `<div class="detail-description">${screen.overview}</div>` : ''}
     `;
 
     // Setup event listeners for detail modal
@@ -820,6 +952,14 @@ function setupDetailModalListeners(screen) {
 
             // Refresh detail view to show new options
             showScreenDetail(screen, 'list');
+        });
+    }
+
+    // Edit button
+    const editBtn = document.getElementById('editScreen');
+    if (editBtn) {
+        editBtn.addEventListener('click', () => {
+            showScreenDetail(screen, currentDetailSource, true);
         });
     }
 
@@ -1025,7 +1165,7 @@ function renderScreens() {
                         <div class="screen-title">${screen.title}</div>
                         <div class="screen-meta">${typeLabel}${screen.year ? ` • ${screen.year}` : ''}</div>
                         ${listStatus ? `<div class="screen-status">${statusLabels[listStatus]}</div>` : ''}
-                        ${rating ? `<div class="screen-rating">${'★'.repeat(rating)}${'☆'.repeat(10 - rating)}</div>` : ''}
+                        ${rating ? `<div class="screen-rating">⭐ ${rating}/10</div>` : ''}
                         ${screen.tags && screen.tags.filter(t => !t.match(/^\d{2}_stars$/)).length > 0 ? `
                             <div class="screen-tags">
                                 ${screen.tags.filter(t => !t.match(/^\d{2}_stars$/)).map(tag => `<span class="tag-badge">${tag}</span>`).join('')}
