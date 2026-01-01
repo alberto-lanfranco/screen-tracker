@@ -1542,6 +1542,27 @@ body.keyboard-open .bottom-nav {
     height: 20px;
 }
 
+/* Edit Circle Button */
+.btn-edit-circle {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.btn-edit-circle:active {
+    transform: scale(0.9);
+    background: var(--separator);
+}
+
 /* Delete Circle Button */
 .btn-delete-circle {
     width: 56px; /* Increased to match taller pill selector */
