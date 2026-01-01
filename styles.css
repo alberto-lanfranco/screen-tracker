@@ -1453,8 +1453,8 @@ body.keyboard-open .bottom-nav {
     }
 }
 
-/* Add Book Button (Search Detail) */
-.btn-add-book {
+/* Add Screen Button (Search Detail) */
+.btn-add-screen {
     width: 100%;
     display: flex;
     flex-direction: column;
@@ -1472,18 +1472,18 @@ body.keyboard-open .bottom-nav {
     margin-bottom: 24px;
 }
 
-.btn-add-book span {
+.btn-add-screen span {
     font-size: 10px;
     font-weight: 500;
     letter-spacing: -0.1px;
 }
 
-.btn-add-book svg {
+.btn-add-screen svg {
     width: 20px;
     height: 20px;
 }
 
-.btn-add-book:active {
+.btn-add-screen:active {
     transform: scale(0.98);
     opacity: 0.9;
 }

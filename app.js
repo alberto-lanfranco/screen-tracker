@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.1.1';
+const APP_VERSION = '1.1.2';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -661,7 +661,7 @@ function displaySearchResults(results) {
         const typeLabel = result.type === 'movie' ? 'Movie' : 'TV Show';
 
         resultEl.innerHTML = `
-            ${posterUrl ? `<img src="${posterUrl}" class="screen-poster" alt="${result.title}">` : '<div class="screen-poster"></div>'}
+            ${posterUrl ? `<img src="${posterUrl}" class="screen-cover" alt="${result.title}">` : '<div class="screen-cover"></div>'}
             <div class="screen-info">
                 <div class="screen-title">${result.title}</div>
                 <div class="screen-meta">${typeLabel}${result.year ? ` • ${result.year}` : ''}</div>
@@ -1019,7 +1019,7 @@ function renderScreens() {
 
         return `
             <div class="screen-card" data-screen-id="${screen.id}">
-                ${posterUrl ? `<img src="${posterUrl}" class="screen-poster" alt="${screen.title}">` : '<div class="screen-poster"></div>'}
+                ${posterUrl ? `<img src="${posterUrl}" class="screen-cover" alt="${screen.title}">` : '<div class="screen-cover"></div>'}
                 <div class="screen-card-content">
                     <div class="screen-card-header">
                         <div class="screen-title">${screen.title}</div>
