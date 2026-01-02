@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.5.0';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -52,6 +52,16 @@ function getAllUniqueTags() {
         }
     });
     return Array.from(tags).sort();
+}
+
+// Update screen rating
+function updateScreenRating(screenId, rating) {
+    const screen = state.screens.find(s => s.id === screenId);
+    if (screen) {
+        screen.tags = setRatingTag(screen.tags || [], rating);
+        saveToLocalStorage();
+        renderScreens();
+    }
 }
 
 // Ensure timestamp integrity when setting list status
@@ -751,15 +761,21 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
     // Rating section (only for watched screens)
     let ratingSection = '';
     if (isInList && listStatus === 'watched') {
-        let stars = '';
-        for (let i = 1; i <= 10; i++) {
-            const filled = i <= rating ? 'filled' : '';
-            stars += `<span class="star ${filled}" data-rating="${i}">★</span>`;
-        }
+        const currentRating = getRatingFromTags(displayScreen.tags || []);
+        const ratingDisplay = currentRating ? `⭐ ${currentRating}/10` : '⭐ ?/10';
         ratingSection = `
             <div class="detail-rating">
                 <label>Rating</label>
-                <div class="star-rating">${stars}</div>
+                <div class="rating-display-wrapper" data-screen-id="${displayScreen.id}">
+                    <div class="rating-display">${ratingDisplay}</div>
+                    <input type="number"
+                           class="rating-input"
+                           min="1"
+                           max="10"
+                           step="1"
+                           style="display: none;"
+                           placeholder="1-10">
+                </div>
             </div>
         `;
     }
@@ -883,7 +899,7 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
                         <line x1="12" y1="8" x2="12" y2="16"></line>
                         <line x1="8" y1="12" x2="16" y2="12"></line>
                     </svg>
-                    <span>Add to List</span>
+                    <span>Add</span>
                 </button>
             `}
         </div>
@@ -998,24 +1014,62 @@ function setupDetailModalListeners(screen) {
         });
     });
 
-    // Star rating
-    const stars = document.querySelectorAll('.star');
-    stars.forEach(star => {
-        star.addEventListener('click', () => {
-            const value = parseInt(star.dataset.value);
+    // Rating input (tap-to-edit)
+    const ratingWrapper = content.querySelector('.rating-display-wrapper');
+    if (ratingWrapper) {
+        const ratingDisplay = ratingWrapper.querySelector('.rating-display');
+        const ratingInput = ratingWrapper.querySelector('.rating-input');
+        const screenId = ratingWrapper.dataset.screenId;
 
-            if (existingScreen) {
-                existingScreen.tags = setRatingTag(existingScreen.tags || [], value);
-                saveToLocalStorage();
-                renderScreens();
+        // Click on display to edit
+        ratingDisplay.addEventListener('click', () => {
+            const currentRating = getRatingFromTags(displayScreen.tags || []);
+            ratingInput.value = currentRating || '';
+            ratingDisplay.style.display = 'none';
+            ratingInput.style.display = 'block';
+            ratingInput.focus();
+            ratingInput.select();
+        });
 
-                // Update UI
-                stars.forEach((s, i) => {
-                    s.classList.toggle('filled', i < value);
-                });
+        // Save rating function
+        const saveRating = () => {
+            const rating = parseInt(ratingInput.value);
+            if (ratingInput.value === '' || (rating >= 1 && rating <= 10)) {
+                // Update the screen rating (empty value clears the rating)
+                updateScreenRating(screenId, ratingInput.value === '' ? null : rating);
+
+                // Update display
+                const newRating = ratingInput.value === '' ? null : rating;
+                const newDisplay = newRating ? `⭐ ${newRating}/10` : '⭐ ?/10';
+                ratingDisplay.textContent = newDisplay;
+
+                // Update displayScreen for consistency
+                const screenToUpdate = state.screens.find(s => s.id === screenId);
+                if (screenToUpdate) {
+                    displayScreen.tags = screenToUpdate.tags;
+                }
+            }
+
+            // Switch back to display mode
+            ratingInput.style.display = 'none';
+            ratingDisplay.style.display = 'block';
+        };
+
+        // Save on blur
+        ratingInput.addEventListener('blur', saveRating);
+
+        // Save on Enter key
+        ratingInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                ratingInput.blur(); // Trigger blur event which saves
+            } else if (e.key === 'Escape') {
+                // Cancel editing
+                ratingInput.style.display = 'none';
+                ratingDisplay.style.display = 'block';
             }
         });
-    });
+    }
 
     // Tag management
     const tagRemoveButtons = document.querySelectorAll('.tag-remove');
@@ -1418,20 +1472,19 @@ async function syncWithGitHub(showFeedback = true) {
 
 // Convert screens to TSV format
 function screensToTSV(screens) {
-    const header = 'Title\tType\tYear\tTMDB ID\tPoster URL\tOverview\tTags\tAdded At\tStarted At\tFinished At\tCached Poster';
+    const header = 'addedAt\tstartedAt\tfinishedAt\ttmdbID\ttags\ttype\ttitle\tyear\tposterURL\tdescription';
     const rows = screens.map(screen => {
         return [
-            screen.title || '',
-            screen.type || '',
-            screen.year || '',
-            screen.tmdbId || '',
-            screen.posterUrl || '',
-            screen.overview || '',
-            (screen.tags || []).join(','),
             screen.addedAt || '',
             screen.startedAt || '',
             screen.finishedAt || '',
-            screen.cachedPoster || ''
+            screen.tmdbId || '',
+            (screen.tags || []).join(','),
+            screen.type || '',
+            screen.title || '',
+            screen.year || '',
+            screen.posterUrl || '',
+            screen.overview || ''
         ].join('\t');
     });
 
@@ -1449,20 +1502,19 @@ function tsvToScreens(tsv) {
         if (!line) continue;
 
         const parts = line.split('\t');
-        if (parts.length < 11) continue;
+        if (parts.length < 10) continue;
 
         const screen = {
-            title: parts[0],
-            type: parts[1],
-            year: parts[2],
+            addedAt: parts[0],
+            startedAt: parts[1],
+            finishedAt: parts[2],
             tmdbId: parts[3],
-            posterUrl: parts[4],
-            overview: parts[5],
-            tags: parts[6] ? parts[6].split(',') : [],
-            addedAt: parts[7],
-            startedAt: parts[8],
-            finishedAt: parts[9],
-            cachedPoster: parts[10]
+            tags: parts[4] ? parts[4].split(',').filter(t => t) : [],
+            type: parts[5],
+            title: parts[6],
+            year: parts[7],
+            posterUrl: parts[8],
+            overview: parts[9]
         };
 
         // Generate ID

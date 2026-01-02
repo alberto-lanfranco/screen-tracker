@@ -252,9 +252,13 @@ Body: {
   - Add tags by typing and pressing Enter
   - Remove tags by clicking × button
   - Tags displayed as pills with remove button
-- **Rating input** (10 tappable stars) - shown only for watched screens
-- **From search**: Shows "Add to List" button
-- **From list**: Shows pill selector (To Watch/Watching/Watched) + delete button
+- **Rating input** (tap-to-edit number field) - shown only for watched screens
+  - Displays as "⭐ 5/10" format (or "⭐ ?/10" when unset), matching list view style
+  - Tap to convert to numerical input field (1-10)
+  - Save on blur or Enter key, cancel on Escape
+  - Supports clearing rating by leaving input empty
+- **From search**: Shows "Add" button
+- **From list**: Shows pill selector (To Watch/Watching/Watched) + edit button + delete button
 - Click outside or X button to close
 
 ### 4. Data Persistence
@@ -270,27 +274,26 @@ Body: {
 
 #### TSV Structure
 ```tsv
-Title	Type	Year	TMDB ID	Poster URL	Overview	Tags	Added At	Started At	Finished At	Cached Poster
-The Matrix	movie	1999	603	https://...	A computer hacker...	scifi,action,09_stars	2025-01-01T10:00:00.000Z
-Inception	movie	2010	27205	https://...	A thief who steals...	scifi,thriller	2025-01-01T11:00:00.000Z	2025-01-01T12:00:00.000Z
-Breaking Bad	tv	2008	1396	https://...	A high school chemistry...	10_stars,drama	2025-01-01T09:00:00.000Z	2025-01-01T10:00:00.000Z	2025-01-01T20:00:00.000Z
+addedAt	startedAt	finishedAt	tmdbID	tags	type	title	year	posterURL	description
+2025-01-01T10:00:00.000Z			603	scifi,action,09_stars	movie	The Matrix	1999	https://...	A computer hacker...
+2025-01-01T11:00:00.000Z	2025-01-01T12:00:00.000Z		27205	scifi,thriller	movie	Inception	2010	https://...	A thief who steals...
+2025-01-01T09:00:00.000Z	2025-01-01T10:00:00.000Z	2025-01-01T20:00:00.000Z	1396	10_stars,drama	tv	Breaking Bad	2008	https://...	A high school chemistry...
 ```
 
-- **Columns**: Title, Type, Year, TMDB ID, Poster URL, Overview, Tags, Added At, Started At, Finished At, Cached Poster
+- **Columns**: addedAt, startedAt, finishedAt, tmdbID, tags, type, title, year, posterURL, description
 - **Delimiter**: Tab character (\t)
 - **Encoding**: UTF-8
 - **Data Model**: Denormalized - TSV stores complete metadata
-  - **Title**: Screen title
-  - **Type**: "movie" or "tv"
-  - **Year**: Release/first air year (YYYY)
-  - **TMDB ID**: The Movie Database ID (for re-fetching if needed)
-  - **Poster URL**: Original TMDB poster URL
-  - **Overview**: Plot description
-  - **Tags**: Comma-separated (includes rating tags like "09_stars")
-  - **Added At**: ISO 8601 timestamp (required)
-  - **Started At**: ISO 8601 timestamp (empty for To Watch)
-  - **Finished At**: ISO 8601 timestamp (empty for To Watch and Watching)
-  - **Cached Poster**: Not synced (left empty to keep file size small)
+  - **addedAt**: ISO 8601 timestamp (required)
+  - **startedAt**: ISO 8601 timestamp (empty for To Watch)
+  - **finishedAt**: ISO 8601 timestamp (empty for To Watch and Watching)
+  - **tmdbID**: The Movie Database ID (for re-fetching if needed)
+  - **tags**: Comma-separated (includes rating tags like "09_stars")
+  - **type**: "movie" or "tv"
+  - **title**: Screen title
+  - **year**: Release/first air year (YYYY)
+  - **posterURL**: Original TMDB poster URL
+  - **description**: Plot description
 
 #### Local Storage (Cache)
 - localStorage key: `screenTracker_screens`
@@ -304,7 +307,7 @@ Breaking Bad	tv	2008	1396	https://...	A high school chemistry...	10_stars,drama	
   - Cached automatically when screens are added
   - Existing screens migrated on app load (background process)
   - Display logic prefers cachedPoster over posterUrl
-  - Only posterUrl is synced to cloud (cachedPoster excluded)
+  - cachedPoster is stored locally only (not synced to cloud to minimize file size)
 
 #### Settings Storage
 - localStorage key: `screenTracker_settings`
@@ -557,7 +560,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **Version Format**: MAJOR.MINOR.PATCH (e.g., 1.0.0)
 - **Location**: `APP_VERSION` constant in `app.js` and `CACHE_VERSION` in `sw.js`
 - **Display**: Shown in Settings tab under "About" section
-- **Current Version**: 1.3.0
+- **Current Version**: 1.5.0
 - **When to Update**:
   - **MAJOR**: Breaking changes, major redesigns, incompatible data format changes
   - **MINOR**: New features, significant additions (e.g., episode tracking, new views)
@@ -592,6 +595,9 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
    - Mention any breaking changes or migrations
 
 ### Version History
+- **1.5.0** (2026-01-02): Updated rating input to use tap-to-edit number field interface. Replaced the 10-star tappable interface with a more streamlined approach: displays rating as "⭐ 5/10" (or "⭐ ?/10" when unset) matching the list view style. Tap the rating to convert it to a numerical input field (1-10). Save rating on blur or Enter key, cancel on Escape. Supports clearing rating by leaving input empty. Added `updateScreenRating()` function. Updated rating display and input styles in styles.css.
+- **1.4.0** (2026-01-02): Restructured TSV cloud sync format. Reordered columns to prioritize timestamps and metadata: addedAt, startedAt, finishedAt, tmdbID, tags, type, title, year, posterURL, description. Renamed columns from title-case with spaces to camelCase (e.g., "Added At" → "addedAt", "Poster URL" → "posterURL", "Overview" → "description"). Removed "Cached Poster" column from sync (remains local-only). Updated `screensToTSV()` and `tsvToScreens()` functions. **Breaking change**: Existing gists will need to be re-synced with new format.
+- **1.3.1** (2026-01-02): Changed "Add to List" button label to just "Add" in search result detail modal for improved UI simplicity and consistency.
 - **1.3.0** (2026-01-01): Implemented full edit functionality for tracked screens. Added `updateScreenMetadata()` function to update screen properties (title, type, year, overview, poster URL). Edit button now opens edit mode with editable input fields. Users can modify all screen metadata and save changes. Poster cache is automatically updated when poster URL is changed. Cancel button returns to normal view without saving changes.
 - **1.2.0** (2025-01-01): Updated UI to match book-tracker reference. Changed rating display in list view from full stars to emoji format (⭐ 8/10). Added edit button in detail modal for tracked screens (circular button between pill selector and delete button). Reordered detail modal elements: header, action buttons, tags, rating (only for watched), description. Rating now only shown for watched screens. Edit button shows placeholder alert (full edit functionality to be implemented).
 - **1.1.2** (2025-01-01): Fixed poster sizing and add button styling to match book-tracker layout. Search result posters now 60x90px (was using wrong class name). Fixed add button styling in detail modal. Changed class from `screen-poster` to `screen-cover` to match CSS. Fixed `.btn-add-book` → `.btn-add-screen` in CSS.
@@ -630,7 +636,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - [ ] Move screen between lists
 - [ ] Delete screen from list
 - [ ] Detail modal opens/closes
-- [ ] Rating works (10 stars)
+- [ ] Rating works (tap-to-edit number field)
 - [ ] Tags can be added/removed
 - [ ] Data persists on reload
 - [ ] Works offline (after first load)
