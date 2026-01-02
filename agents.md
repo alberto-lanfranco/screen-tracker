@@ -620,7 +620,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **Version Format**: MAJOR.MINOR.PATCH (e.g., 1.0.0)
 - **Location**: `APP_VERSION` constant in `app.js` and `CACHE_VERSION` in `sw.js`
 - **Display**: Shown in Settings tab under "About" section
-- **Current Version**: 1.13.2
+- **Current Version**: 1.13.3
 - **When to Update**:
   - **MAJOR**: Breaking changes, major redesigns, incompatible data format changes
   - **MINOR**: New features, significant additions (e.g., episode tracking, new views)
@@ -655,6 +655,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
    - Mention any breaking changes or migrations
 
 ### Version History
+- **1.13.3** (2026-01-02): Implemented automatic recalculation of waiting status across devices. After a pull-merge sync completes, the app now automatically fetches episode data from TMDB for all watching TV shows and recalculates their `waitingForNewEpisodes` status. This ensures that when you mark the last episode as watched on Device A and sync, Device B will automatically show the "⏳ waiting for new episodes" indicator without needing to open each show's detail modal. Added `recalculateWaitingStatusForAll()` function that processes shows sequentially to avoid overwhelming the TMDB API. The recalculation runs asynchronously in the background after sync completes, without blocking the UI.
 - **1.13.2** (2026-01-02): Fixed bug where "waiting for new episodes" indicator would disappear after syncing with GitHub Gist. The `waitingForNewEpisodes` and `cachedPoster` properties are local-only (not stored in TSV), so they were being lost during the merge process when remote screens were selected. Modified `mergeScreens()` function to preserve these local-only properties from the local screen even when the remote version is selected as the source of truth. This ensures the waiting indicator and cached poster images persist across sync operations.
 - **1.13.1** (2026-01-02): Fixed bug where "waiting for new episodes" indicator wouldn't appear immediately after marking an episode as watched. Added `renderScreens()` call to `updateLastWatchedEpisode()` so the list view updates in the background while the detail modal is still open. The waiting message now appears immediately without needing to switch tabs.
 - **1.13.0** (2026-01-02): Added "waiting for new episodes" indicator for TV shows in Screens list view. When a TV show is marked as "Watching" and the last watched episode is either the final available episode or the next episode has a future air date, the list view now displays "⏳ waiting for new episodes" below the "Watching" status label. The waiting status is calculated when the detail modal is opened (episodes are fetched) and when episodes are marked as watched. Added `checkIfWaitingForNewEpisodes()` function to determine waiting status, updated `fetchAndDisplayEpisodes()` to calculate and store the status in `screen.waitingForNewEpisodes` property, modified `updateLastWatchedEpisode()` to recalculate status when episodes are marked as watched, and added CSS styling for the waiting message (.screen-waiting).
