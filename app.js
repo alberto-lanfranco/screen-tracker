@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.9.0';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -74,7 +74,8 @@ function updateLastWatchedEpisode(screenId, season, episode) {
 // Helper functions for determining screen list status from timestamps
 function getScreenListStatus(screen) {
     if (screen.finishedAt) return 'watched';
-    if (screen.startedAt) return 'watching';
+    // Watching status is only for TV shows with episode tracking
+    if (screen.type === 'tv' && screen.lastWatchedEpisode) return 'watching';
     if (screen.addedAt) return 'to_watch';
     return null;
 }
@@ -111,27 +112,25 @@ function setListTimestamps(screen, listStatus) {
 
     if (listStatus === 'to_watch') {
         screen.addedAt = now;
-        screen.startedAt = null;
         screen.finishedAt = null;
+        // Clear episode tracking when moving back to "to watch"
+        screen.lastWatchedEpisode = null;
     } else if (listStatus === 'watching') {
-        screen.startedAt = now;
+        // Watching is determined by having lastWatchedEpisode set
+        // This case is for when pill selector is clicked, but actual
+        // episode tracking is done via episode checkmark buttons
         screen.finishedAt = null;
 
-        // Integrity check: ensure addedAt is present and before startedAt
-        if (!screen.addedAt || screen.addedAt > screen.startedAt) {
-            screen.addedAt = screen.startedAt;
+        // Ensure addedAt is set
+        if (!screen.addedAt) {
+            screen.addedAt = now;
         }
     } else if (listStatus === 'watched') {
         screen.finishedAt = now;
 
-        // Integrity check: ensure startedAt is present and before finishedAt
-        if (!screen.startedAt || screen.startedAt > screen.finishedAt) {
-            screen.startedAt = screen.finishedAt;
-        }
-
-        // Integrity check: ensure addedAt is present and before startedAt
-        if (!screen.addedAt || screen.addedAt > screen.startedAt) {
-            screen.addedAt = screen.startedAt;
+        // Ensure addedAt is present
+        if (!screen.addedAt) {
+            screen.addedAt = screen.finishedAt;
         }
     }
 
@@ -960,12 +959,14 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
                         </svg>
                         <span>To Watch</span>
                     </button>
+                    ${displayScreen.type === 'tv' ? `
                     <button class="pill-segment ${listStatus === 'watching' ? 'active' : ''}" data-status="watching">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polygon points="5 3 19 12 5 21 5 3"></polygon>
                         </svg>
                         <span>Watching</span>
                     </button>
+                    ` : ''}
                     <button class="pill-segment ${listStatus === 'watched' ? 'active' : ''}" data-status="watched">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="20 6 9 17 4 12"></polyline>
@@ -1736,13 +1737,12 @@ async function syncWithGitHub(showFeedback = true) {
 
 // Convert screens to TSV format
 function screensToTSV(screens) {
-    const header = 'addedAt\tstartedAt\tfinishedAt\ttmdbID\tlastWatchedEpisode\ttags\ttype\ttitle\tyear\tposterURL\tdescription';
+    const header = 'addedAt\tfinishedAt\ttmdbID\tlastWatchedEpisode\ttags\ttype\ttitle\tyear\tposterURL\tdescription';
     const rows = screens.map(screen => {
         // Map 'tv' to 'show' for TSV export
         const tsvType = screen.type === 'tv' ? 'show' : screen.type;
         return [
             screen.addedAt || '',
-            screen.startedAt || '',
             screen.finishedAt || '',
             screen.tmdbId || '',
             screen.lastWatchedEpisode || '',
@@ -1769,23 +1769,22 @@ function tsvToScreens(tsv) {
         if (!line) continue;
 
         const parts = line.split('\t');
-        if (parts.length < 11) continue;
+        if (parts.length < 10) continue;
 
         // Map 'show' back to 'tv' for internal representation
-        const internalType = parts[6] === 'show' ? 'tv' : parts[6];
+        const internalType = parts[5] === 'show' ? 'tv' : parts[5];
 
         const screen = {
             addedAt: parts[0],
-            startedAt: parts[1],
-            finishedAt: parts[2],
-            tmdbId: parts[3],
-            lastWatchedEpisode: parts[4] || null,
-            tags: parts[5] ? parts[5].split(',').filter(t => t) : [],
+            finishedAt: parts[1],
+            tmdbId: parts[2],
+            lastWatchedEpisode: parts[3] || null,
+            tags: parts[4] ? parts[4].split(',').filter(t => t) : [],
             type: internalType,
-            title: parts[7],
-            year: parts[8],
-            posterUrl: parts[9],
-            overview: parts[10]
+            title: parts[6],
+            year: parts[7],
+            posterUrl: parts[8],
+            overview: parts[9]
         };
 
         // Generate ID
