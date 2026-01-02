@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.5.4';
+const APP_VERSION = '1.5.5';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -1473,13 +1473,15 @@ async function syncWithGitHub(showFeedback = true) {
 function screensToTSV(screens) {
     const header = 'addedAt\tstartedAt\tfinishedAt\ttmdbID\ttags\ttype\ttitle\tyear\tposterURL\tdescription';
     const rows = screens.map(screen => {
+        // Map 'tv' to 'show' for TSV export
+        const tsvType = screen.type === 'tv' ? 'show' : screen.type;
         return [
             screen.addedAt || '',
             screen.startedAt || '',
             screen.finishedAt || '',
             screen.tmdbId || '',
             (screen.tags || []).join(','),
-            screen.type || '',
+            tsvType || '',
             screen.title || '',
             screen.year || '',
             screen.posterUrl || '',
@@ -1503,13 +1505,16 @@ function tsvToScreens(tsv) {
         const parts = line.split('\t');
         if (parts.length < 10) continue;
 
+        // Map 'show' back to 'tv' for internal representation
+        const internalType = parts[5] === 'show' ? 'tv' : parts[5];
+
         const screen = {
             addedAt: parts[0],
             startedAt: parts[1],
             finishedAt: parts[2],
             tmdbId: parts[3],
             tags: parts[4] ? parts[4].split(',').filter(t => t) : [],
-            type: parts[5],
+            type: internalType,
             title: parts[6],
             year: parts[7],
             posterUrl: parts[8],

@@ -277,7 +277,7 @@ Body: {
 addedAt	startedAt	finishedAt	tmdbID	tags	type	title	year	posterURL	description
 2025-01-01T10:00:00.000Z			603	scifi,action,09_stars	movie	The Matrix	1999	https://...	A computer hacker...
 2025-01-01T11:00:00.000Z	2025-01-01T12:00:00.000Z		27205	scifi,thriller	movie	Inception	2010	https://...	A thief who steals...
-2025-01-01T09:00:00.000Z	2025-01-01T10:00:00.000Z	2025-01-01T20:00:00.000Z	1396	10_stars,drama	tv	Breaking Bad	2008	https://...	A high school chemistry...
+2025-01-01T09:00:00.000Z	2025-01-01T10:00:00.000Z	2025-01-01T20:00:00.000Z	1396	10_stars,drama	show	Breaking Bad	2008	https://...	A high school chemistry...
 ```
 
 - **Columns**: addedAt, startedAt, finishedAt, tmdbID, tags, type, title, year, posterURL, description
@@ -289,7 +289,7 @@ addedAt	startedAt	finishedAt	tmdbID	tags	type	title	year	posterURL	description
   - **finishedAt**: ISO 8601 timestamp (empty for To Watch and Watching)
   - **tmdbID**: The Movie Database ID (for re-fetching if needed)
   - **tags**: Comma-separated (includes rating tags like "09_stars")
-  - **type**: "movie" or "tv"
+  - **type**: "movie" or "show" (internally stored as "tv" for TV shows)
   - **title**: Screen title
   - **year**: Release/first air year (YYYY)
   - **posterURL**: Original TMDB poster URL
@@ -560,7 +560,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **Version Format**: MAJOR.MINOR.PATCH (e.g., 1.0.0)
 - **Location**: `APP_VERSION` constant in `app.js` and `CACHE_VERSION` in `sw.js`
 - **Display**: Shown in Settings tab under "About" section
-- **Current Version**: 1.5.4
+- **Current Version**: 1.5.5
 - **When to Update**:
   - **MAJOR**: Breaking changes, major redesigns, incompatible data format changes
   - **MINOR**: New features, significant additions (e.g., episode tracking, new views)
@@ -595,6 +595,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
    - Mention any breaking changes or migrations
 
 ### Version History
+- **1.5.5** (2026-01-02): Changed TSV type field from 'tv' to 'show' for better readability. Updated `screensToTSV()` to export TV shows as 'show' and `tsvToScreens()` to convert 'show' back to 'tv' for internal representation. Internal code continues to use 'tv' (matching TMDB API), but TSV files now use the more readable 'show' label.
 - **1.5.4** (2026-01-02): Fixed automatic GitHub Gist sync. The `saveToLocalStorage()` function was not calling `syncWithGitHub()` as documented, so screen changes weren't automatically syncing to the cloud. Added automatic silent sync call after each local save to ensure data is pushed to GitHub Gist after every screen operation (add/move/delete/rate/tag).
 - **1.5.3** (2026-01-02): Fixed search results to properly interleave movies and TV shows by popularity. Previously, all movie results were shown before TV show results, which could hide highly relevant TV shows. Now captures the `popularity` score from TMDB API responses and sorts the combined results by popularity (descending) before taking the top 20. This ensures the most relevant/popular results appear first regardless of type.
 - **1.5.2** (2026-01-02): Fixed critical bug preventing detail modal from working. The `setupDetailModalListeners` function was referencing `content` and `displayScreen` variables that were not in scope, causing ReferenceErrors. Added local definitions of these variables at the beginning of the function: `content` is retrieved from DOM, and `displayScreen` is derived from `existingScreen || screen`.
