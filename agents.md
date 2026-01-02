@@ -324,16 +324,17 @@ addedAt	finishedAt	tmdbID	lastWatchedEpisode	tags	title	year	posterURL	descripti
 - **Columns**: addedAt, finishedAt, tmdbID, lastWatchedEpisode, tags, title, year, posterURL, description
 - **Delimiter**: Tab character (\t)
 - **Encoding**: UTF-8
+- **Required Field**: Only `tmdbID` is required - all other fields are optional
 - **Data Model**: Denormalized - TSV stores complete metadata
-  - **addedAt**: ISO 8601 timestamp (required, when screen was added to collection)
-  - **finishedAt**: ISO 8601 timestamp (empty for To Watch and Watching)
-  - **tmdbID**: The Movie Database ID (for re-fetching if needed)
-  - **lastWatchedEpisode**: Last watched episode for TV shows, format "s02e06" (empty for movies or unwatched shows)
-  - **tags**: Comma-separated; MUST start with "movie" or "show" as first tag (type indicator), followed by rating tags like "09_stars" and user-defined tags
-  - **title**: Screen title
-  - **year**: Release/first air year (YYYY)
-  - **posterURL**: Original TMDB poster URL
-  - **description**: Plot description
+  - **addedAt**: ISO 8601 timestamp (defaults to current timestamp if missing)
+  - **finishedAt**: ISO 8601 timestamp (defaults to empty if missing)
+  - **tmdbID**: The Movie Database ID (REQUIRED - used to fetch missing metadata)
+  - **lastWatchedEpisode**: Last watched episode for TV shows, format "s02e06" (defaults to empty if missing)
+  - **tags**: Comma-separated; should start with "movie" or "show" as first tag (type indicator), followed by rating tags like "09_stars" and user-defined tags (if type tag missing, fetched from TMDB API)
+  - **title**: Screen title (fetched from TMDB API if missing)
+  - **year**: Release/first air year YYYY (fetched from TMDB API if missing)
+  - **posterURL**: Original TMDB poster URL (fetched from TMDB API if missing)
+  - **description**: Plot description (fetched from TMDB API if missing)
 
 #### Local Storage (Cache)
 - localStorage key: `screenTracker_screens`
@@ -614,7 +615,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **Version Format**: MAJOR.MINOR.PATCH (e.g., 1.0.0)
 - **Location**: `APP_VERSION` constant in `app.js` and `CACHE_VERSION` in `sw.js`
 - **Display**: Shown in Settings tab under "About" section
-- **Current Version**: 1.10.1
+- **Current Version**: 1.11.0
 - **When to Update**:
   - **MAJOR**: Breaking changes, major redesigns, incompatible data format changes
   - **MINOR**: New features, significant additions (e.g., episode tracking, new views)
@@ -649,6 +650,9 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
    - Mention any breaking changes or migrations
 
 ### Version History
+- **1.11.0** (2026-01-02): Added tag suggestions feature to detail modal. When viewing a screen's tags section, users can now tap a dropdown button next to the tag input to see all existing custom tags from their collection. The suggestions panel displays available tags (excluding ones already on the current screen) as clickable chips. Clicking a suggestion instantly adds that tag to the screen. Shows "No available tags" when all tags are already applied or no custom tags exist. Added toggle button with dropdown icon, suggestions panel with chips, click handlers for tag application, and CSS styling including hover effects and animations. This mirrors the book-tracker implementation and makes tag management much easier by avoiding retyping common tags.
+- **1.10.3** (2026-01-02): Implemented tolerant TSV parsing with automatic TMDB metadata fetching. TSV import now only requires `tmdbID` field - all other fields are optional. Missing fields are handled automatically: `addedAt` defaults to current timestamp, `finishedAt` and `lastWatchedEpisode` default to empty, and `tags`, `title`, `year`, `posterUrl`, and `overview` are fetched from TMDB API if not present. Added `fetchScreenMetadataFromTMDB()` function that queries TMDB API for missing metadata (tries movie endpoint first, then TV). Made `tsvToScreens()` async to support API calls during import. This enables simpler TSV files with just TMDB IDs, making manual TSV creation and bulk imports much easier.
+- **1.10.2** (2026-01-02): Added TSV field sanitization to prevent data corruption. TSV export now sanitizes string fields (title, posterUrl, description/overview) by removing newlines and replacing double quotes with single quotes. Added `sanitizeTSVField()` helper function that converts newlines to spaces and replaces `"` with `'` to ensure TSV integrity when syncing to GitHub Gist. Prevents issues with multi-line descriptions or titles containing special characters that could break the TSV format.
 - **1.10.1** (2026-01-02): Fixed PWA update system bugs. (1) Update App button now checks if an update is actually available before reloading - shows "No update available" toast notification if already on latest version instead of unnecessarily restarting the app. (2) Settings (TMDB API key, GitHub Gist ID, API token) now persist when clearing local cache - modified `clearLocalCache()` to only remove screens and sort preferences while preserving settings in localStorage. Updated `updatePWA()` to listen for 'updatefound' event and only reload when a new service worker is installed.
 - **1.10.0** (2026-01-02): Refactored type handling to use movie/show as special reserved tags instead of a separate TSV column. Removed 'type' column from TSV format - type is now stored as the first tag ('movie' or 'show') in the tags column. Internally, screens still use the `type` property ('movie' or 'tv'), but TSV export/import now handles the conversion. Updated filter UI to have three distinct sections: Type filters (Movies/Shows - mutually exclusive), List status filters (To Watch/Watching/Watched - mutually exclusive), and Manual tags (non-mutually exclusive). Users can now combine filters across sections (e.g., Movies + Watched + scifi). Added validation to prevent users from manually adding/removing reserved tags (movie, show, rating tags). Updated `screensToTSV()` to export type as first tag, `tsvToScreens()` to extract type from tags, `getAllUniqueTags()` to exclude type tags, and filter rendering/logic to support three-section structure. **Breaking change**: TSV format updated - column count changed from 10 to 9 columns, existing gists will automatically convert on sync.
 - **1.9.2** (2026-01-02): Fixed bug where marking an episode as watched would reset season fold states. Previously, `updateLastWatchedEpisode()` re-rendered the entire episode list, causing all seasons to return to their default (expanded) state. Now uses in-place DOM updates to modify episode watched states without re-rendering, preserving the user's chosen fold/unfold state for each season during the modal session. Changed from calling `fetchAndDisplayEpisodes()` to directly updating CSS classes on existing episode items.

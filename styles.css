@@ -947,6 +947,12 @@ body.keyboard-open .bottom-nav {
     background: var(--bg-primary);
 }
 
+.no-suggestions {
+    color: var(--text-tertiary);
+    font-size: 13px;
+    font-style: italic;
+}
+
 /* Sort Controls */
 .sort-controls {
     display: flex;

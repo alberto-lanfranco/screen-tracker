@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.10.1';
+const APP_VERSION = '1.11.0';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -862,7 +862,13 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
                     ${tagPills}
                     <div class="tag-input-wrapper">
                         <input type="text" class="tag-input" placeholder="Add tag..." id="newTagInput">
+                        <button class="btn btn-icon" id="toggleTagsBtn" title="Choose from existing tags">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </button>
                     </div>
+                    <div class="tag-suggestions-panel" id="tagSuggestionsPanel"></div>
                 </div>
             </div>
         `;
@@ -1028,7 +1034,13 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
                     `).join('')}
                     <div class="tag-input-wrapper">
                         <input type="text" class="tag-input" placeholder="Add tag..." id="newTagInput">
+                        <button class="btn btn-icon" id="toggleTagsBtn" title="Choose from existing tags">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </button>
                     </div>
+                    <div class="tag-suggestions-panel" id="tagSuggestionsPanel"></div>
                 </div>
             </div>
         ` : ''}
@@ -1314,6 +1326,49 @@ function setupDetailModalListeners(screen) {
                     }
                 }
             }
+        });
+    }
+
+    // Tag suggestions toggle
+    const toggleTagsBtn = document.getElementById('toggleTagsBtn');
+    const suggestionsPanel = document.getElementById('tagSuggestionsPanel');
+
+    if (toggleTagsBtn && suggestionsPanel) {
+        toggleTagsBtn.addEventListener('click', () => {
+            // Get all unique custom tags
+            const allTags = getAllUniqueTags();
+
+            // Filter out tags already on this screen
+            const currentTags = existingScreen ? (existingScreen.tags || []) : [];
+            const availableTags = allTags.filter(t => !currentTags.includes(t));
+
+            if (availableTags.length === 0) {
+                suggestionsPanel.innerHTML = '<div class="no-suggestions">No available tags</div>';
+            } else {
+                suggestionsPanel.innerHTML = availableTags
+                    .map(tag => `<span class="suggestion-chip" data-tag="${tag}">${tag}</span>`)
+                    .join('');
+
+                // Add click handlers to suggestion chips
+                suggestionsPanel.querySelectorAll('.suggestion-chip').forEach(chip => {
+                    chip.addEventListener('click', () => {
+                        const tag = chip.dataset.tag;
+
+                        if (existingScreen) {
+                            if (!existingScreen.tags) existingScreen.tags = [];
+                            if (!existingScreen.tags.includes(tag)) {
+                                existingScreen.tags.push(tag);
+                                saveToLocalStorage();
+                                renderScreens();
+                                showScreenDetail(existingScreen, 'list');
+                            }
+                        }
+                    });
+                });
+            }
+
+            // Toggle visibility
+            suggestionsPanel.classList.toggle('visible');
         });
     }
 }
@@ -1694,7 +1749,7 @@ async function syncWithGitHub(showFeedback = true) {
                 const tsvContent = gistData.files['screens.tsv']?.content;
 
                 if (tsvContent) {
-                    remoteScreens = tsvToScreens(tsvContent);
+                    remoteScreens = await tsvToScreens(tsvContent);
                     console.log('Pulled from Gist:', remoteScreens.length, 'screens');
                 }
             } else if (fetchResponse.status === 404) {
@@ -1773,6 +1828,14 @@ async function syncWithGitHub(showFeedback = true) {
     }
 }
 
+// Sanitize TSV field by removing newlines and replacing double quotes
+function sanitizeTSVField(value) {
+    if (!value) return '';
+    return String(value)
+        .replace(/[\r\n]+/g, ' ')  // Replace newlines with spaces
+        .replace(/"/g, "'");        // Replace double quotes with single quotes
+}
+
 // Convert screens to TSV format
 function screensToTSV(screens) {
     const header = 'addedAt\tfinishedAt\ttmdbID\tlastWatchedEpisode\ttags\ttitle\tyear\tposterURL\tdescription';
@@ -1788,56 +1851,154 @@ function screensToTSV(screens) {
             screen.tmdbId || '',
             screen.lastWatchedEpisode || '',
             allTags.join(','),
-            screen.title || '',
+            sanitizeTSVField(screen.title),
             screen.year || '',
-            screen.posterUrl || '',
-            screen.overview || ''
+            sanitizeTSVField(screen.posterUrl),
+            sanitizeTSVField(screen.overview)
         ].join('\t');
     });
 
     return header + '\n' + rows.join('\n');
 }
 
-// Convert TSV to screens
-function tsvToScreens(tsv) {
+// Fetch screen metadata from TMDB API
+async function fetchScreenMetadataFromTMDB(tmdbId, type = null) {
+    const apiKey = getTmdbApiKey();
+    if (!apiKey || !tmdbId) return null;
+
+    try {
+        // If type is not specified, try to detect it by attempting both endpoints
+        if (!type) {
+            // Try movie first
+            const movieResponse = await fetch(`${TMDB_BASE_URL}/movie/${tmdbId}?api_key=${apiKey}`);
+            if (movieResponse.ok) {
+                const movieData = await movieResponse.json();
+                return {
+                    type: 'movie',
+                    title: movieData.title,
+                    year: movieData.release_date ? movieData.release_date.substring(0, 4) : '',
+                    posterUrl: movieData.poster_path ? `${TMDB_IMAGE_BASE}/w300${movieData.poster_path}` : '',
+                    overview: movieData.overview || ''
+                };
+            }
+
+            // Try TV show
+            const tvResponse = await fetch(`${TMDB_BASE_URL}/tv/${tmdbId}?api_key=${apiKey}`);
+            if (tvResponse.ok) {
+                const tvData = await tvResponse.json();
+                return {
+                    type: 'tv',
+                    title: tvData.name,
+                    year: tvData.first_air_date ? tvData.first_air_date.substring(0, 4) : '',
+                    posterUrl: tvData.poster_path ? `${TMDB_IMAGE_BASE}/w300${tvData.poster_path}` : '',
+                    overview: tvData.overview || ''
+                };
+            }
+
+            return null;
+        }
+
+        // Fetch based on known type
+        const endpoint = type === 'movie' ? 'movie' : 'tv';
+        const response = await fetch(`${TMDB_BASE_URL}/${endpoint}/${tmdbId}?api_key=${apiKey}`);
+
+        if (!response.ok) return null;
+
+        const data = await response.json();
+
+        return {
+            type: type,
+            title: type === 'movie' ? data.title : data.name,
+            year: type === 'movie'
+                ? (data.release_date ? data.release_date.substring(0, 4) : '')
+                : (data.first_air_date ? data.first_air_date.substring(0, 4) : ''),
+            posterUrl: data.poster_path ? `${TMDB_IMAGE_BASE}/w300${data.poster_path}` : '',
+            overview: data.overview || ''
+        };
+    } catch (error) {
+        console.error('Error fetching metadata from TMDB:', error);
+        return null;
+    }
+}
+
+// Convert TSV to screens (async to support fetching missing data)
+async function tsvToScreens(tsv) {
     const lines = tsv.split('\n');
     if (lines.length < 2) return [];
 
-    const screens = [];
+    const screenPromises = [];
+
     for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
 
         const parts = line.split('\t');
-        if (parts.length < 9) continue;
 
-        // Extract tags and determine type from first tag (movie or show)
-        const tags = parts[4] ? parts[4].split(',').filter(t => t) : [];
-        const typeTag = tags.find(t => t === 'movie' || t === 'show');
-        const internalType = typeTag === 'show' ? 'tv' : 'movie';
+        // Only tmdbId is required (parts[2])
+        const tmdbId = parts[2];
+        if (!tmdbId) continue;
 
-        // Remove movie/show from tags as they're stored in the type property internally
-        const filteredTags = tags.filter(t => t !== 'movie' && t !== 'show');
+        // Create a promise for each screen that may need API data
+        const screenPromise = (async () => {
+            // Extract existing data from TSV
+            let addedAt = parts[0] || new Date().toISOString();
+            let finishedAt = parts[1] || '';
+            let lastWatchedEpisode = parts[3] || null;
 
-        const screen = {
-            addedAt: parts[0],
-            finishedAt: parts[1],
-            tmdbId: parts[2],
-            lastWatchedEpisode: parts[3] || null,
-            tags: filteredTags,
-            type: internalType,
-            title: parts[5],
-            year: parts[6],
-            posterUrl: parts[7],
-            overview: parts[8]
-        };
+            // Extract tags and determine type
+            const tags = parts[4] ? parts[4].split(',').filter(t => t) : [];
+            const typeTag = tags.find(t => t === 'movie' || t === 'show');
+            let internalType = typeTag === 'show' ? 'tv' : 'movie';
 
-        // Generate ID
-        screen.id = screen.tmdbId ? `${screen.type}_${screen.tmdbId}` : `manual_${Date.now()}_${i}`;
+            // Check if we need to fetch metadata (title, year, posterUrl, overview, or type)
+            let title = parts[5] || '';
+            let year = parts[6] || '';
+            let posterUrl = parts[7] || '';
+            let overview = parts[8] || '';
 
-        screens.push(screen);
+            const needsMetadata = !title || !year || !posterUrl || !overview || !typeTag;
+
+            if (needsMetadata) {
+                // Fetch metadata from TMDB API
+                const metadata = await fetchScreenMetadataFromTMDB(tmdbId, typeTag ? internalType : null);
+
+                if (metadata) {
+                    // Use API data for missing fields
+                    if (!typeTag) internalType = metadata.type;
+                    if (!title) title = metadata.title;
+                    if (!year) year = metadata.year;
+                    if (!posterUrl) posterUrl = metadata.posterUrl;
+                    if (!overview) overview = metadata.overview;
+                }
+            }
+
+            // Remove movie/show from tags as they're stored in the type property internally
+            const filteredTags = tags.filter(t => t !== 'movie' && t !== 'show');
+
+            const screen = {
+                addedAt: addedAt,
+                finishedAt: finishedAt,
+                tmdbId: tmdbId,
+                lastWatchedEpisode: lastWatchedEpisode,
+                tags: filteredTags,
+                type: internalType,
+                title: title,
+                year: year,
+                posterUrl: posterUrl,
+                overview: overview
+            };
+
+            // Generate ID
+            screen.id = screen.tmdbId ? `${screen.type}_${screen.tmdbId}` : `manual_${Date.now()}_${i}`;
+
+            return screen;
+        })();
+
+        screenPromises.push(screenPromise);
     }
 
+    // Wait for all screens to be processed (including API calls)
+    const screens = await Promise.all(screenPromises);
     return screens;
 }
 
