@@ -373,15 +373,18 @@ Every sync operation follows this flow:
 3. **Update Local**: Update `state.screens` and localStorage with merged data
 4. **Push**: Upload merged data back to GitHub Gist
 
-**Merge Strategy**:
+**Merge Strategy** (TSV is Single Source of Truth):
+- Remote TSV from GitHub Gist is authoritative
 - Uses screen ID as unique key (`movie_123`, `tv_456`, etc.)
-- For screens that exist only locally → keep local version
-- For screens that exist only remotely → add remote version
-- For screens that exist in both → pick the one with the most recent timestamp
-  - Compares latest timestamp from (`addedAt`, `startedAt`, `finishedAt`)
+- **For screens in remote TSV** → always include in merge
+- **For screens in both local and remote** → pick the one with most recent timestamp
+  - Compares latest timestamp from (`addedAt`, `finishedAt`)
   - More recent version wins (based on latest activity)
+- **For screens only in local (not in TSV)**:
+  - If `addedAt` > `lastSyncTime` → new local addition, keep it
+  - If `addedAt` ≤ `lastSyncTime` → was deleted remotely, don't restore it
 
-This ensures data converges across multiple devices without overwriting changes.
+This ensures deletions propagate properly between devices while preserving new local additions.
 
 #### Auto-Sync on Startup
 1. App loads → `init()`
@@ -615,7 +618,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **Version Format**: MAJOR.MINOR.PATCH (e.g., 1.0.0)
 - **Location**: `APP_VERSION` constant in `app.js` and `CACHE_VERSION` in `sw.js`
 - **Display**: Shown in Settings tab under "About" section
-- **Current Version**: 1.11.1
+- **Current Version**: 1.12.0
 - **When to Update**:
   - **MAJOR**: Breaking changes, major redesigns, incompatible data format changes
   - **MINOR**: New features, significant additions (e.g., episode tracking, new views)
@@ -650,6 +653,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
    - Mention any breaking changes or migrations
 
 ### Version History
+- **1.12.0** (2026-01-02): Made GitHub Gist TSV the single source of truth for cross-device sync. Deletions now properly propagate between devices. Rewrote `mergeScreens()` function to treat remote TSV as authoritative: if a screen is not present in the TSV, it was deleted and should not be restored. Added timestamp-based logic to distinguish between new local additions (added after last sync - keep them) and remotely deleted screens (existed before last sync - remove them). Implemented `lastSyncTime` persistence in localStorage to track when last successful sync occurred. This fixes the issue where deleted screens would reappear when syncing between devices. Screens are now only restored if they were added locally after the last sync, otherwise they're treated as deletions.
 - **1.11.1** (2026-01-02): Fixed two critical bugs. (1) Rating section now appears immediately when marking a screen as "watched" - pill selector click now refreshes the detail modal to show/hide the rating section based on new status. (2) Fixed deletion persistence issue - deleted screens no longer reappear after sync. Changed auto-sync behavior: after local changes (add/delete/edit), sync now does push-only to GitHub Gist instead of pull-merge-push. This prevents deleted items from being restored from remote. Manual sync and startup sync still do full pull-merge-push for cross-device synchronization. Added `pullMerge` parameter to `syncWithGitHub()` function.
 - **1.11.0** (2026-01-02): Added tag suggestions feature to detail modal. When viewing a screen's tags section, users can now tap a dropdown button next to the tag input to see all existing custom tags from their collection. The suggestions panel displays available tags (excluding ones already on the current screen) as clickable chips. Clicking a suggestion instantly adds that tag to the screen. Shows "No available tags" when all tags are already applied or no custom tags exist. Added toggle button with dropdown icon, suggestions panel with chips, click handlers for tag application, and CSS styling including hover effects and animations. This mirrors the book-tracker implementation and makes tag management much easier by avoiding retyping common tags.
 - **1.10.3** (2026-01-02): Implemented tolerant TSV parsing with automatic TMDB metadata fetching. TSV import now only requires `tmdbID` field - all other fields are optional. Missing fields are handled automatically: `addedAt` defaults to current timestamp, `finishedAt` and `lastWatchedEpisode` default to empty, and `tags`, `title`, `year`, `posterUrl`, and `overview` are fetched from TMDB API if not present. Added `fetchScreenMetadataFromTMDB()` function that queries TMDB API for missing metadata (tries movie endpoint first, then TV). Made `tsvToScreens()` async to support API calls during import. This enables simpler TSV files with just TMDB IDs, making manual TSV creation and bulk imports much easier.
