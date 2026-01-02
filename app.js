@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.10.0';
+const APP_VERSION = '1.10.1';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -1843,15 +1843,15 @@ function tsvToScreens(tsv) {
 
 // Maintenance functions
 function clearLocalCache() {
-    if (confirm('This will clear all local data. Are you sure?')) {
+    if (confirm('This will clear all screens and preferences (settings will be preserved). Are you sure?')) {
         localStorage.removeItem('screenTracker_screens');
-        localStorage.removeItem('screenTracker_settings');
         localStorage.removeItem('screenTracker_sort');
+        // Note: screenTracker_settings is preserved
         state.screens = [];
         state.filterTags = [];
         state.searchQuery = '';
         renderScreens();
-        showMaintenanceStatus('Cache cleared successfully', 'success');
+        showMaintenanceStatus('Cache cleared successfully (settings preserved)', 'success');
     }
 }
 
@@ -1859,12 +1859,38 @@ function updatePWA() {
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistration().then(reg => {
             if (reg) {
+                showMaintenanceStatus('Checking for updates...', 'info');
+
+                // Set up a flag to track if update is found
+                let updateFound = false;
+
+                // Listen for update events
+                const onUpdateFound = () => {
+                    updateFound = true;
+                    const newWorker = reg.installing;
+
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed') {
+                            showMaintenanceStatus('Update found! Reloading...', 'success');
+                            // Give user a moment to see the message
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 500);
+                        }
+                    });
+                };
+
+                reg.addEventListener('updatefound', onUpdateFound);
+
+                // Trigger update check
                 reg.update().then(() => {
-                    showMaintenanceStatus('Checking for updates...', 'info');
-                    // Force reload after a short delay
+                    // Wait a bit to see if update is found
                     setTimeout(() => {
-                        window.location.reload();
-                    }, 1000);
+                        reg.removeEventListener('updatefound', onUpdateFound);
+                        if (!updateFound) {
+                            showMaintenanceStatus('No update available', 'info');
+                        }
+                    }, 2000);
                 });
             }
         });
