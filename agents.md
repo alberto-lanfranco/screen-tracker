@@ -560,7 +560,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **Version Format**: MAJOR.MINOR.PATCH (e.g., 1.0.0)
 - **Location**: `APP_VERSION` constant in `app.js` and `CACHE_VERSION` in `sw.js`
 - **Display**: Shown in Settings tab under "About" section
-- **Current Version**: 1.5.2
+- **Current Version**: 1.5.3
 - **When to Update**:
   - **MAJOR**: Breaking changes, major redesigns, incompatible data format changes
   - **MINOR**: New features, significant additions (e.g., episode tracking, new views)
@@ -595,6 +595,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
    - Mention any breaking changes or migrations
 
 ### Version History
+- **1.5.3** (2026-01-02): Fixed search results to properly interleave movies and TV shows by popularity. Previously, all movie results were shown before TV show results, which could hide highly relevant TV shows. Now captures the `popularity` score from TMDB API responses and sorts the combined results by popularity (descending) before taking the top 20. This ensures the most relevant/popular results appear first regardless of type.
 - **1.5.2** (2026-01-02): Fixed critical bug preventing detail modal from working. The `setupDetailModalListeners` function was referencing `content` and `displayScreen` variables that were not in scope, causing ReferenceErrors. Added local definitions of these variables at the beginning of the function: `content` is retrieved from DOM, and `displayScreen` is derived from `existingScreen || screen`.
 - **1.5.1** (2026-01-02): Fixed bug where screen detail modal wasn't showing when clicking on items in lists. The normal view template was still using old star rating HTML instead of the new `ratingSection` variable with tap-to-edit interface. Replaced inline star rating HTML with `${ratingSection}` variable.
 - **1.5.0** (2026-01-02): Updated rating input to use tap-to-edit number field interface. Replaced the 10-star tappable interface with a more streamlined approach: displays rating as "⭐ 5/10" (or "⭐ ?/10" when unset) matching the list view style. Tap the rating to convert it to a numerical input field (1-10). Save rating on blur or Enter key, cancel on Escape. Supports clearing rating by leaving input empty. Added `updateScreenRating()` function. Updated rating display and input styles in styles.css.

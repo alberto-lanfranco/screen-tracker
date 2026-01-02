@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.5.2';
+const APP_VERSION = '1.5.3';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -637,7 +637,8 @@ async function handleSearch() {
                     title: movie.title,
                     year: movie.release_date ? movie.release_date.substring(0, 4) : '',
                     posterUrl: movie.poster_path ? `${TMDB_IMAGE_BASE}/w300${movie.poster_path}` : null,
-                    overview: movie.overview
+                    overview: movie.overview,
+                    popularity: movie.popularity || 0
                 });
             });
         }
@@ -652,13 +653,15 @@ async function handleSearch() {
                     title: show.name,
                     year: show.first_air_date ? show.first_air_date.substring(0, 4) : '',
                     posterUrl: show.poster_path ? `${TMDB_IMAGE_BASE}/w300${show.poster_path}` : null,
-                    overview: show.overview
+                    overview: show.overview,
+                    popularity: show.popularity || 0
                 });
             });
         }
 
         if (results.length > 0) {
-            // Sort by popularity (already sorted by TMDB) and take top 20
+            // Sort by popularity (descending) to interleave movies and TV shows by relevance
+            results.sort((a, b) => b.popularity - a.popularity);
             displaySearchResults(results.slice(0, 20));
         } else {
             searchResults.innerHTML = '<div class="loading">No results found</div>';
