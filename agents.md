@@ -604,7 +604,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **Version Format**: MAJOR.MINOR.PATCH (e.g., 1.0.0)
 - **Location**: `APP_VERSION` constant in `app.js` and `CACHE_VERSION` in `sw.js`
 - **Display**: Shown in Settings tab under "About" section
-- **Current Version**: 1.9.0
+- **Current Version**: 1.9.1
 - **When to Update**:
   - **MAJOR**: Breaking changes, major redesigns, incompatible data format changes
   - **MINOR**: New features, significant additions (e.g., episode tracking, new views)
@@ -639,6 +639,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
    - Mention any breaking changes or migrations
 
 ### Version History
+- **1.9.1** (2026-01-02): Changed episode list default state to expanded. All seasons now display as unfolded by default when viewing TV show details, making episodes immediately visible. Added `expanded` class to season headers and set initial display to `block` instead of `none`.
 - **1.9.0** (2026-01-02): Simplified state management by removing `startedAt` timestamp. "Watching" status is now exclusively for TV shows with episode tracking (`lastWatchedEpisode` set). Movies only have "To Watch" and "Watched" states. Updated `getScreenListStatus()` to check `type === 'tv' && lastWatchedEpisode` for watching status. Updated `setListTimestamps()` to remove startedAt handling. Removed `startedAt` column from TSV sync format (now: addedAt, finishedAt, tmdbID, lastWatchedEpisode, tags, type, title, year, posterURL, description). Hidden "Watching" pill segment for movies in detail modal. Updated screen object structure documentation. **Breaking change**: TSV format updated - existing gists need re-sync.
 - **1.8.0** (2026-01-02): Added episode tracking for TV shows. Users can now mark episodes as watched by clicking a checkmark button next to each episode. The app tracks the last watched episode in format 's02e06' and visually marks all episodes up to and including the last watched episode with a checkmark. Added `lastWatchedEpisode` field to screen data structure and TSV sync format (new column after tmdbID). Added helper functions: `parseEpisodeCode()`, `formatEpisodeCode()`, `isEpisodeWatched()`, and `updateLastWatchedEpisode()`. Updated `fetchAndDisplayEpisodes()` to render watch buttons and handle watch state. Added comprehensive CSS styling for watched episodes and watch buttons. **Breaking change**: TSV format updated - existing gists will need to be re-synced.
 - **1.7.0** (2026-01-02): Added full episode list display for TV shows in detail modal. When viewing a TV show, the detail modal now fetches and displays all episodes grouped by season in collapsible accordions. Each episode shows episode number, title, air date, and overview. Episodes are fetched on-demand from TMDB API using the `append_to_response` parameter to efficiently retrieve multiple seasons in a single API call (up to 20 seasons). Season 0 (specials) is excluded. Added new functions: `fetchTVEpisodes()` and `fetchAndDisplayEpisodes()`. Added comprehensive CSS styling for episodes section including season headers, episode items, and responsive design.

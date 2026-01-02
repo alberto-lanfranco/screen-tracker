@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '1.9.1';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -1063,14 +1063,14 @@ async function fetchAndDisplayEpisodes(tmdbId, screenId) {
 
         episodesHTML += `
             <div class="season-group">
-                <button class="season-header" data-season="${season.season_number}">
+                <button class="season-header expanded" data-season="${season.season_number}">
                     <span class="season-title">Season ${season.season_number}</span>
                     <span class="season-count">${episodes.length} episode${episodes.length !== 1 ? 's' : ''}</span>
                     <svg class="season-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>
                 </button>
-                <div class="episodes-list" data-season="${season.season_number}" style="display: none;">
+                <div class="episodes-list" data-season="${season.season_number}" style="display: block;">
                     ${episodes.map(ep => {
                         const watched = isEpisodeWatched(season.season_number, ep.episode_number, lastWatchedEpisode);
                         return `
