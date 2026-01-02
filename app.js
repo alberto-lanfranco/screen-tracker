@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.3.1';
+const APP_VERSION = '1.4.0';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -1418,20 +1418,19 @@ async function syncWithGitHub(showFeedback = true) {
 
 // Convert screens to TSV format
 function screensToTSV(screens) {
-    const header = 'Title\tType\tYear\tTMDB ID\tPoster URL\tOverview\tTags\tAdded At\tStarted At\tFinished At\tCached Poster';
+    const header = 'addedAt\tstartedAt\tfinishedAt\ttmdbID\ttags\ttype\ttitle\tyear\tposterURL\tdescription';
     const rows = screens.map(screen => {
         return [
-            screen.title || '',
-            screen.type || '',
-            screen.year || '',
-            screen.tmdbId || '',
-            screen.posterUrl || '',
-            screen.overview || '',
-            (screen.tags || []).join(','),
             screen.addedAt || '',
             screen.startedAt || '',
             screen.finishedAt || '',
-            screen.cachedPoster || ''
+            screen.tmdbId || '',
+            (screen.tags || []).join(','),
+            screen.type || '',
+            screen.title || '',
+            screen.year || '',
+            screen.posterUrl || '',
+            screen.overview || ''
         ].join('\t');
     });
 
@@ -1449,20 +1448,19 @@ function tsvToScreens(tsv) {
         if (!line) continue;
 
         const parts = line.split('\t');
-        if (parts.length < 11) continue;
+        if (parts.length < 10) continue;
 
         const screen = {
-            title: parts[0],
-            type: parts[1],
-            year: parts[2],
+            addedAt: parts[0],
+            startedAt: parts[1],
+            finishedAt: parts[2],
             tmdbId: parts[3],
-            posterUrl: parts[4],
-            overview: parts[5],
-            tags: parts[6] ? parts[6].split(',') : [],
-            addedAt: parts[7],
-            startedAt: parts[8],
-            finishedAt: parts[9],
-            cachedPoster: parts[10]
+            tags: parts[4] ? parts[4].split(',').filter(t => t) : [],
+            type: parts[5],
+            title: parts[6],
+            year: parts[7],
+            posterUrl: parts[8],
+            overview: parts[9]
         };
 
         // Generate ID
