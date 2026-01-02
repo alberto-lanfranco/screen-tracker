@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.7.0';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -723,6 +723,55 @@ function displaySearchResults(results) {
     searchResults.appendChild(manualEntryButton);
 }
 
+// Fetch TV show episodes from TMDB API
+async function fetchTVEpisodes(tmdbId) {
+    const apiKey = getTmdbApiKey();
+    if (!apiKey || !tmdbId) return null;
+
+    try {
+        // First, get the TV show details to find out how many seasons there are
+        const tvResponse = await fetch(`${TMDB_BASE_URL}/tv/${tmdbId}?api_key=${apiKey}`);
+        if (!tvResponse.ok) return null;
+
+        const tvData = await tvResponse.json();
+        const seasons = tvData.seasons || [];
+
+        // Filter out "Season 0" (specials) and get season numbers
+        const seasonNumbers = seasons
+            .filter(s => s.season_number > 0)
+            .map(s => s.season_number)
+            .slice(0, 20); // TMDB allows max 20 append_to_response calls
+
+        if (seasonNumbers.length === 0) return null;
+
+        // Build append_to_response parameter for all seasons
+        const appendSeasons = seasonNumbers.map(num => `season/${num}`).join(',');
+
+        // Fetch all seasons in one call
+        const detailsResponse = await fetch(
+            `${TMDB_BASE_URL}/tv/${tmdbId}?api_key=${apiKey}&append_to_response=${appendSeasons}`
+        );
+
+        if (!detailsResponse.ok) return null;
+
+        const detailsData = await detailsResponse.json();
+
+        // Extract season data
+        const seasonsData = [];
+        seasonNumbers.forEach(num => {
+            const seasonKey = `season/${num}`;
+            if (detailsData[seasonKey]) {
+                seasonsData.push(detailsData[seasonKey]);
+            }
+        });
+
+        return seasonsData;
+    } catch (error) {
+        console.error('Failed to fetch TV episodes:', error);
+        return null;
+    }
+}
+
 // Show screen detail modal
 function showScreenDetail(screen, source = 'list', editMode = false) {
     currentDetailScreen = screen;
@@ -927,6 +976,12 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
         ${ratingSection}
 
         ${screen.overview ? `<div class="detail-description">${screen.overview}</div>` : ''}
+
+        ${displayScreen.type === 'tv' && displayScreen.tmdbId ? `
+            <div id="episodesList" class="episodes-section">
+                <div class="episodes-loading">Loading episodes...</div>
+            </div>
+        ` : ''}
     `;
     }
 
@@ -934,6 +989,73 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
     setupDetailModalListeners(existingScreen || screen);
 
     modal.classList.add('active');
+
+    // Fetch and display episodes for TV shows
+    if (displayScreen.type === 'tv' && displayScreen.tmdbId && !editMode) {
+        fetchAndDisplayEpisodes(displayScreen.tmdbId);
+    }
+}
+
+// Fetch and display episodes for a TV show
+async function fetchAndDisplayEpisodes(tmdbId) {
+    const episodesContainer = document.getElementById('episodesList');
+    if (!episodesContainer) return;
+
+    const seasonsData = await fetchTVEpisodes(tmdbId);
+
+    if (!seasonsData || seasonsData.length === 0) {
+        episodesContainer.innerHTML = '<div class="episodes-empty">No episode data available</div>';
+        return;
+    }
+
+    // Build episodes HTML grouped by season
+    let episodesHTML = '<div class="episodes-header">Episodes</div>';
+
+    seasonsData.forEach(season => {
+        const episodes = season.episodes || [];
+        if (episodes.length === 0) return;
+
+        episodesHTML += `
+            <div class="season-group">
+                <button class="season-header" data-season="${season.season_number}">
+                    <span class="season-title">Season ${season.season_number}</span>
+                    <span class="season-count">${episodes.length} episode${episodes.length !== 1 ? 's' : ''}</span>
+                    <svg class="season-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </button>
+                <div class="episodes-list" data-season="${season.season_number}" style="display: none;">
+                    ${episodes.map(ep => `
+                        <div class="episode-item">
+                            <div class="episode-number">${ep.episode_number}</div>
+                            <div class="episode-info">
+                                <div class="episode-title">${ep.name || 'Untitled'}</div>
+                                <div class="episode-meta">${ep.air_date || 'No date'}</div>
+                                ${ep.overview ? `<div class="episode-overview">${ep.overview}</div>` : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    });
+
+    episodesContainer.innerHTML = episodesHTML;
+
+    // Add click handlers for season headers (accordion)
+    episodesContainer.querySelectorAll('.season-header').forEach(header => {
+        header.addEventListener('click', () => {
+            const seasonNum = header.dataset.season;
+            const episodesList = episodesContainer.querySelector(`.episodes-list[data-season="${seasonNum}"]`);
+            const chevron = header.querySelector('.season-chevron');
+
+            if (episodesList) {
+                const isVisible = episodesList.style.display !== 'none';
+                episodesList.style.display = isVisible ? 'none' : 'block';
+                header.classList.toggle('expanded', !isVisible);
+            }
+        });
+    });
 }
 
 // Setup event listeners for detail modal

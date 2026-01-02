@@ -139,6 +139,25 @@ GET https://api.themoviedb.org/3/search/tv?api_key={key}&query={query}&page=1
 - **Detail view**: w500 (500px width) - could be upgraded
 - **Thumbnails**: w185 (185px width) - not currently used
 
+#### TV Show Episodes Endpoints
+
+**Get TV Series Details**
+```
+GET https://api.themoviedb.org/3/tv/{series_id}?api_key={key}
+```
+Returns TV series information including seasons array.
+
+**Get All Episodes (with append_to_response)**
+```
+GET https://api.themoviedb.org/3/tv/{series_id}?api_key={key}&append_to_response=season/1,season/2,...
+```
+Fetches TV series with multiple seasons in one API call. Maximum 20 seasons can be appended.
+
+**Response Structure**:
+- Each season object contains `episodes` array
+- Episode object: `episode_number`, `name`, `air_date`, `overview`, `still_path`
+- Season 0 (specials) is filtered out in implementation
+
 ### GitHub Gist API
 
 #### Authentication
@@ -248,6 +267,13 @@ Body: {
   - Poster image on left
   - Metadata on right (title, type, year, TMDB ID)
 - Complete overview/description
+- **Episode List** (TV shows only):
+  - Fetched on-demand from TMDB API when modal opens
+  - Grouped by season in collapsible accordion format
+  - Each episode displays: episode number, title, air date, overview
+  - Season 0 (specials) excluded
+  - Uses `append_to_response` to fetch up to 20 seasons efficiently
+  - Not stored permanently (fetched fresh each time)
 - **Tags management** - shown for screens in lists:
   - Add tags by typing and pressing Enter
   - Remove tags by clicking × button
@@ -574,7 +600,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **Version Format**: MAJOR.MINOR.PATCH (e.g., 1.0.0)
 - **Location**: `APP_VERSION` constant in `app.js` and `CACHE_VERSION` in `sw.js`
 - **Display**: Shown in Settings tab under "About" section
-- **Current Version**: 1.6.0
+- **Current Version**: 1.7.0
 - **When to Update**:
   - **MAJOR**: Breaking changes, major redesigns, incompatible data format changes
   - **MINOR**: New features, significant additions (e.g., episode tracking, new views)
@@ -609,6 +635,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
    - Mention any breaking changes or migrations
 
 ### Version History
+- **1.7.0** (2026-01-02): Added full episode list display for TV shows in detail modal. When viewing a TV show, the detail modal now fetches and displays all episodes grouped by season in collapsible accordions. Each episode shows episode number, title, air date, and overview. Episodes are fetched on-demand from TMDB API using the `append_to_response` parameter to efficiently retrieve multiple seasons in a single API call (up to 20 seasons). Season 0 (specials) is excluded. Added new functions: `fetchTVEpisodes()` and `fetchAndDisplayEpisodes()`. Added comprehensive CSS styling for episodes section including season headers, episode items, and responsive design.
 - **1.6.0** (2026-01-02): Implemented proper 2-way sync for GitHub Gist. Previously, sync only pushed local data to Gist, causing data loss when using multiple devices (they would overwrite each other). Now implements pull-merge-push cycle: (1) pulls current Gist content, (2) merges with local data using timestamp-based conflict resolution, (3) updates local state with merged data, (4) pushes merged result to Gist. Merge strategy uses screen ID as unique key and picks the version with the most recent timestamp when conflicts occur. This ensures data converges across devices. Added `getLatestTimestamp()` and `mergeScreens()` helper functions.
 - **1.5.5** (2026-01-02): Changed TSV type field from 'tv' to 'show' for better readability. Updated `screensToTSV()` to export TV shows as 'show' and `tsvToScreens()` to convert 'show' back to 'tv' for internal representation. Internal code continues to use 'tv' (matching TMDB API), but TSV files now use the more readable 'show' label.
 - **1.5.4** (2026-01-02): Fixed automatic GitHub Gist sync. The `saveToLocalStorage()` function was not calling `syncWithGitHub()` as documented, so screen changes weren't automatically syncing to the cloud. Added automatic silent sync call after each local save to ensure data is pushed to GitHub Gist after every screen operation (add/move/delete/rate/tag).
