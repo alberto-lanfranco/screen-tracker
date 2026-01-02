@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.5.4';
+const APP_VERSION = '1.6.0';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -1391,6 +1391,45 @@ function showMaintenanceStatus(message, type = 'info') {
 }
 
 // GitHub Gist sync
+// Helper function to get the most recent timestamp from a screen
+function getLatestTimestamp(screen) {
+    const timestamps = [screen.addedAt, screen.startedAt, screen.finishedAt].filter(t => t);
+    if (timestamps.length === 0) return null;
+    return new Date(Math.max(...timestamps.map(t => new Date(t).getTime())));
+}
+
+// Merge local and remote screens (2-way sync)
+function mergeScreens(localScreens, remoteScreens) {
+    const merged = new Map();
+
+    // Add all local screens to map
+    localScreens.forEach(screen => {
+        merged.set(screen.id, screen);
+    });
+
+    // Merge with remote screens
+    remoteScreens.forEach(remoteScreen => {
+        const localScreen = merged.get(remoteScreen.id);
+
+        if (!localScreen) {
+            // Screen only exists remotely - add it
+            merged.set(remoteScreen.id, remoteScreen);
+        } else {
+            // Screen exists in both - pick the one with most recent timestamp
+            const localLatest = getLatestTimestamp(localScreen);
+            const remoteLatest = getLatestTimestamp(remoteScreen);
+
+            if (remoteLatest && (!localLatest || remoteLatest > localLatest)) {
+                // Remote is newer - use it
+                merged.set(remoteScreen.id, remoteScreen);
+            }
+            // Otherwise keep local (already in map)
+        }
+    });
+
+    return Array.from(merged.values());
+}
+
 async function syncWithGitHub(showFeedback = true) {
     if (!state.settings.apiToken) {
         if (showFeedback) {
@@ -1410,8 +1449,44 @@ async function syncWithGitHub(showFeedback = true) {
     if (showFeedback) showSyncStatus('Syncing...', 'info');
 
     try {
-        // Prepare TSV data
-        const tsvData = screensToTSV(state.screens);
+        let remoteScreens = [];
+
+        // Step 1: Pull from GitHub Gist (if gist exists)
+        if (state.settings.gistId) {
+            const fetchResponse = await fetch(`https://api.github.com/gists/${state.settings.gistId}`, {
+                headers: {
+                    'Authorization': `token ${state.settings.apiToken}`,
+                    'Accept': 'application/vnd.github+json'
+                }
+            });
+
+            if (fetchResponse.ok) {
+                const gistData = await fetchResponse.json();
+                const tsvContent = gistData.files['screens.tsv']?.content;
+
+                if (tsvContent) {
+                    remoteScreens = tsvToScreens(tsvContent);
+                    console.log('Pulled from Gist:', remoteScreens.length, 'screens');
+                }
+            } else if (fetchResponse.status === 404) {
+                console.log('Gist not found, will create new one');
+                state.settings.gistId = '';
+            } else {
+                throw new Error(`GitHub API error: ${fetchResponse.status}`);
+            }
+        }
+
+        // Step 2: Merge local and remote screens
+        const mergedScreens = mergeScreens(state.screens, remoteScreens);
+        console.log('Merged:', mergedScreens.length, 'screens (local:', state.screens.length, ', remote:', remoteScreens.length, ')');
+
+        // Step 3: Update local state with merged data
+        state.screens = mergedScreens;
+        localStorage.setItem('screenTracker_screens', JSON.stringify(state.screens));
+        renderScreens();
+
+        // Step 4: Push merged data to GitHub Gist
+        const tsvData = screensToTSV(mergedScreens);
 
         const gistData = {
             description: 'Screen Tracker Data',
@@ -1473,13 +1548,15 @@ async function syncWithGitHub(showFeedback = true) {
 function screensToTSV(screens) {
     const header = 'addedAt\tstartedAt\tfinishedAt\ttmdbID\ttags\ttype\ttitle\tyear\tposterURL\tdescription';
     const rows = screens.map(screen => {
+        // Map 'tv' to 'show' for TSV export
+        const tsvType = screen.type === 'tv' ? 'show' : screen.type;
         return [
             screen.addedAt || '',
             screen.startedAt || '',
             screen.finishedAt || '',
             screen.tmdbId || '',
             (screen.tags || []).join(','),
-            screen.type || '',
+            tsvType || '',
             screen.title || '',
             screen.year || '',
             screen.posterUrl || '',
@@ -1503,13 +1580,16 @@ function tsvToScreens(tsv) {
         const parts = line.split('\t');
         if (parts.length < 10) continue;
 
+        // Map 'show' back to 'tv' for internal representation
+        const internalType = parts[5] === 'show' ? 'tv' : parts[5];
+
         const screen = {
             addedAt: parts[0],
             startedAt: parts[1],
             finishedAt: parts[2],
             tmdbId: parts[3],
             tags: parts[4] ? parts[4].split(',').filter(t => t) : [],
-            type: parts[5],
+            type: internalType,
             title: parts[6],
             year: parts[7],
             posterUrl: parts[8],

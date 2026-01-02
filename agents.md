@@ -277,7 +277,7 @@ Body: {
 addedAt	startedAt	finishedAt	tmdbID	tags	type	title	year	posterURL	description
 2025-01-01T10:00:00.000Z			603	scifi,action,09_stars	movie	The Matrix	1999	https://...	A computer hacker...
 2025-01-01T11:00:00.000Z	2025-01-01T12:00:00.000Z		27205	scifi,thriller	movie	Inception	2010	https://...	A thief who steals...
-2025-01-01T09:00:00.000Z	2025-01-01T10:00:00.000Z	2025-01-01T20:00:00.000Z	1396	10_stars,drama	tv	Breaking Bad	2008	https://...	A high school chemistry...
+2025-01-01T09:00:00.000Z	2025-01-01T10:00:00.000Z	2025-01-01T20:00:00.000Z	1396	10_stars,drama	show	Breaking Bad	2008	https://...	A high school chemistry...
 ```
 
 - **Columns**: addedAt, startedAt, finishedAt, tmdbID, tags, type, title, year, posterURL, description
@@ -289,7 +289,7 @@ addedAt	startedAt	finishedAt	tmdbID	tags	type	title	year	posterURL	description
   - **finishedAt**: ISO 8601 timestamp (empty for To Watch and Watching)
   - **tmdbID**: The Movie Database ID (for re-fetching if needed)
   - **tags**: Comma-separated (includes rating tags like "09_stars")
-  - **type**: "movie" or "tv"
+  - **type**: "movie" or "show" (internally stored as "tv" for TV shows)
   - **title**: Screen title
   - **year**: Release/first air year (YYYY)
   - **posterURL**: Original TMDB poster URL
@@ -324,23 +324,37 @@ addedAt	startedAt	finishedAt	tmdbID	tags	type	title	year	posterURL	description
 5. If Gist ID empty: new gist created on first sync
 6. Settings saved to localStorage
 
+#### 2-Way Sync (Pull-Merge-Push)
+Every sync operation follows this flow:
+
+1. **Pull**: Fetch current gist content from GitHub
+2. **Merge**: Combine local and remote screens using merge strategy
+3. **Update Local**: Update `state.screens` and localStorage with merged data
+4. **Push**: Upload merged data back to GitHub Gist
+
+**Merge Strategy**:
+- Uses screen ID as unique key (`movie_123`, `tv_456`, etc.)
+- For screens that exist only locally → keep local version
+- For screens that exist only remotely → add remote version
+- For screens that exist in both → pick the one with the most recent timestamp
+  - Compares latest timestamp from (`addedAt`, `startedAt`, `finishedAt`)
+  - More recent version wins (based on latest activity)
+
+This ensures data converges across multiple devices without overwriting changes.
+
 #### Auto-Sync on Startup
 1. App loads → `init()`
 2. Loads settings from localStorage
-3. If token + gistId exist: `syncWithGitHub(false)`
-4. Fetches gist content
-5. Parses TSV → `tsvToScreens(tsvContent)`
-6. Builds complete screen objects
-7. Updates state (cloud takes precedence)
-8. Updates UI
+3. Loads local screens from localStorage
+4. If token + gistId configured: Triggers 2-way sync
+5. Merged data updates both local state and UI
 
-#### Push on Change
+#### Auto-Sync on Change
 1. Any screen operation (add/move/delete/rate/tag)
 2. `saveToLocalStorage()` called
-3. Automatically calls `syncWithGitHub()`
-4. Converts screens to TSV → `screensToTSV()`
-5. Updates gist
-6. Silent push (no UI status shown)
+3. Automatically calls `syncWithGitHub(false)` (silent)
+4. Performs full pull-merge-push cycle
+5. Updates local state with merged result
 
 ### 6. Sorting
 - **Sort Options**:
@@ -560,7 +574,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **Version Format**: MAJOR.MINOR.PATCH (e.g., 1.0.0)
 - **Location**: `APP_VERSION` constant in `app.js` and `CACHE_VERSION` in `sw.js`
 - **Display**: Shown in Settings tab under "About" section
-- **Current Version**: 1.5.4
+- **Current Version**: 1.6.0
 - **When to Update**:
   - **MAJOR**: Breaking changes, major redesigns, incompatible data format changes
   - **MINOR**: New features, significant additions (e.g., episode tracking, new views)
@@ -595,6 +609,8 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
    - Mention any breaking changes or migrations
 
 ### Version History
+- **1.6.0** (2026-01-02): Implemented proper 2-way sync for GitHub Gist. Previously, sync only pushed local data to Gist, causing data loss when using multiple devices (they would overwrite each other). Now implements pull-merge-push cycle: (1) pulls current Gist content, (2) merges with local data using timestamp-based conflict resolution, (3) updates local state with merged data, (4) pushes merged result to Gist. Merge strategy uses screen ID as unique key and picks the version with the most recent timestamp when conflicts occur. This ensures data converges across devices. Added `getLatestTimestamp()` and `mergeScreens()` helper functions.
+- **1.5.5** (2026-01-02): Changed TSV type field from 'tv' to 'show' for better readability. Updated `screensToTSV()` to export TV shows as 'show' and `tsvToScreens()` to convert 'show' back to 'tv' for internal representation. Internal code continues to use 'tv' (matching TMDB API), but TSV files now use the more readable 'show' label.
 - **1.5.4** (2026-01-02): Fixed automatic GitHub Gist sync. The `saveToLocalStorage()` function was not calling `syncWithGitHub()` as documented, so screen changes weren't automatically syncing to the cloud. Added automatic silent sync call after each local save to ensure data is pushed to GitHub Gist after every screen operation (add/move/delete/rate/tag).
 - **1.5.3** (2026-01-02): Fixed search results to properly interleave movies and TV shows by popularity. Previously, all movie results were shown before TV show results, which could hide highly relevant TV shows. Now captures the `popularity` score from TMDB API responses and sorts the combined results by popularity (descending) before taking the top 20. This ensures the most relevant/popular results appear first regardless of type.
 - **1.5.2** (2026-01-02): Fixed critical bug preventing detail modal from working. The `setupDetailModalListeners` function was referencing `content` and `displayScreen` variables that were not in scope, causing ReferenceErrors. Added local definitions of these variables at the beginning of the function: `content` is retrieved from DOM, and `displayScreen` is derived from `existingScreen || screen`.
