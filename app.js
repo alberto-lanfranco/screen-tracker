@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.5.1';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -921,16 +921,7 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
             </div>
         ` : ''}
 
-        ${isInList && listStatus === 'watched' ? `
-            <div class="detail-rating">
-                <label>Rating</label>
-                <div class="star-rating" data-rating="${rating || 0}">
-                    ${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => `
-                        <span class="star ${rating && i <= rating ? 'filled' : ''}" data-value="${i}">★</span>
-                    `).join('')}
-                </div>
-            </div>
-        ` : ''}
+        ${ratingSection}
 
         ${screen.overview ? `<div class="detail-description">${screen.overview}</div>` : ''}
     `;
