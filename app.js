@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.10.3';
+const APP_VERSION = '1.11.0';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -862,7 +862,13 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
                     ${tagPills}
                     <div class="tag-input-wrapper">
                         <input type="text" class="tag-input" placeholder="Add tag..." id="newTagInput">
+                        <button class="btn btn-icon" id="toggleTagsBtn" title="Choose from existing tags">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </button>
                     </div>
+                    <div class="tag-suggestions-panel" id="tagSuggestionsPanel"></div>
                 </div>
             </div>
         `;
@@ -1028,7 +1034,13 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
                     `).join('')}
                     <div class="tag-input-wrapper">
                         <input type="text" class="tag-input" placeholder="Add tag..." id="newTagInput">
+                        <button class="btn btn-icon" id="toggleTagsBtn" title="Choose from existing tags">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </button>
                     </div>
+                    <div class="tag-suggestions-panel" id="tagSuggestionsPanel"></div>
                 </div>
             </div>
         ` : ''}
@@ -1314,6 +1326,49 @@ function setupDetailModalListeners(screen) {
                     }
                 }
             }
+        });
+    }
+
+    // Tag suggestions toggle
+    const toggleTagsBtn = document.getElementById('toggleTagsBtn');
+    const suggestionsPanel = document.getElementById('tagSuggestionsPanel');
+
+    if (toggleTagsBtn && suggestionsPanel) {
+        toggleTagsBtn.addEventListener('click', () => {
+            // Get all unique custom tags
+            const allTags = getAllUniqueTags();
+
+            // Filter out tags already on this screen
+            const currentTags = existingScreen ? (existingScreen.tags || []) : [];
+            const availableTags = allTags.filter(t => !currentTags.includes(t));
+
+            if (availableTags.length === 0) {
+                suggestionsPanel.innerHTML = '<div class="no-suggestions">No available tags</div>';
+            } else {
+                suggestionsPanel.innerHTML = availableTags
+                    .map(tag => `<span class="suggestion-chip" data-tag="${tag}">${tag}</span>`)
+                    .join('');
+
+                // Add click handlers to suggestion chips
+                suggestionsPanel.querySelectorAll('.suggestion-chip').forEach(chip => {
+                    chip.addEventListener('click', () => {
+                        const tag = chip.dataset.tag;
+
+                        if (existingScreen) {
+                            if (!existingScreen.tags) existingScreen.tags = [];
+                            if (!existingScreen.tags.includes(tag)) {
+                                existingScreen.tags.push(tag);
+                                saveToLocalStorage();
+                                renderScreens();
+                                showScreenDetail(existingScreen, 'list');
+                            }
+                        }
+                    });
+                });
+            }
+
+            // Toggle visibility
+            suggestionsPanel.classList.toggle('visible');
         });
     }
 }
