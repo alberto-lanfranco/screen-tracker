@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.13.1';
+const APP_VERSION = '1.13.2';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -1793,8 +1793,24 @@ function mergeScreens(localScreens, remoteScreens) {
     const merged = new Map();
     const remoteIds = new Set();
 
+    // Create a map of local screens for quick lookup
+    const localScreensMap = new Map();
+    localScreens.forEach(screen => {
+        localScreensMap.set(screen.id, screen);
+    });
+
     // Step 1: Add all remote screens (TSV is source of truth)
     remoteScreens.forEach(screen => {
+        // Preserve local-only properties (waitingForNewEpisodes, cachedPoster)
+        const localScreen = localScreensMap.get(screen.id);
+        if (localScreen) {
+            if (localScreen.waitingForNewEpisodes !== undefined) {
+                screen.waitingForNewEpisodes = localScreen.waitingForNewEpisodes;
+            }
+            if (localScreen.cachedPoster) {
+                screen.cachedPoster = localScreen.cachedPoster;
+            }
+        }
         merged.set(screen.id, screen);
         remoteIds.add(screen.id);
     });
@@ -1811,8 +1827,9 @@ function mergeScreens(localScreens, remoteScreens) {
             if (localLatest && (!remoteLatest || localLatest > remoteLatest)) {
                 // Local is newer - use it
                 merged.set(localScreen.id, localScreen);
+            } else {
+                // Remote is newer - but preserve local-only properties (already done in Step 1)
             }
-            // Otherwise keep remote (already in map)
         } else {
             // Screen exists locally but NOT remotely
             // Only keep if it's new (added after last sync) - otherwise it was deleted
