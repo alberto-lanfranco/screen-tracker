@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.13.1';
+const APP_VERSION = '1.13.3';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -177,6 +177,35 @@ function checkIfWaitingForNewEpisodes(seasonsData, lastWatchedEpisode) {
     }
 
     return false;
+}
+
+// Recalculate waiting status for all watching TV shows
+async function recalculateWaitingStatusForAll() {
+    const watchingShows = state.screens.filter(screen =>
+        screen.type === 'tv' && getScreenListStatus(screen) === 'watching' && screen.tmdbId
+    );
+
+    if (watchingShows.length === 0) {
+        return;
+    }
+
+    console.log(`Recalculating waiting status for ${watchingShows.length} watching TV shows...`);
+
+    // Process shows sequentially to avoid overwhelming the TMDB API
+    for (const screen of watchingShows) {
+        try {
+            const seasonsData = await fetchTVEpisodes(screen.tmdbId);
+            if (seasonsData && seasonsData.length > 0) {
+                screen.waitingForNewEpisodes = checkIfWaitingForNewEpisodes(seasonsData, screen.lastWatchedEpisode);
+            }
+        } catch (error) {
+            console.error(`Failed to recalculate waiting status for ${screen.title}:`, error);
+        }
+    }
+
+    // Save updated waiting statuses
+    saveToLocalStorage();
+    console.log('Waiting status recalculation complete');
 }
 
 // Helper functions for determining screen list status from timestamps
@@ -1793,8 +1822,24 @@ function mergeScreens(localScreens, remoteScreens) {
     const merged = new Map();
     const remoteIds = new Set();
 
+    // Create a map of local screens for quick lookup
+    const localScreensMap = new Map();
+    localScreens.forEach(screen => {
+        localScreensMap.set(screen.id, screen);
+    });
+
     // Step 1: Add all remote screens (TSV is source of truth)
     remoteScreens.forEach(screen => {
+        // Preserve local-only properties (waitingForNewEpisodes, cachedPoster)
+        const localScreen = localScreensMap.get(screen.id);
+        if (localScreen) {
+            if (localScreen.waitingForNewEpisodes !== undefined) {
+                screen.waitingForNewEpisodes = localScreen.waitingForNewEpisodes;
+            }
+            if (localScreen.cachedPoster) {
+                screen.cachedPoster = localScreen.cachedPoster;
+            }
+        }
         merged.set(screen.id, screen);
         remoteIds.add(screen.id);
     });
@@ -1811,8 +1856,9 @@ function mergeScreens(localScreens, remoteScreens) {
             if (localLatest && (!remoteLatest || localLatest > remoteLatest)) {
                 // Local is newer - use it
                 merged.set(localScreen.id, localScreen);
+            } else {
+                // Remote is newer - but preserve local-only properties (already done in Step 1)
             }
-            // Otherwise keep remote (already in map)
         } else {
             // Screen exists locally but NOT remotely
             // Only keep if it's new (added after last sync) - otherwise it was deleted
@@ -1945,6 +1991,15 @@ async function syncWithGitHub(showFeedback = true, pullMerge = true) {
         state.lastSyncTime = Date.now();
         localStorage.setItem('screenTracker_lastSyncTime', state.lastSyncTime.toString());
         console.log('Sync completed, lastSyncTime updated:', new Date(state.lastSyncTime).toISOString());
+
+        // Recalculate waiting status for all watching TV shows after pull-merge sync
+        if (pullMerge && remoteScreens.length > 0) {
+            // Run asynchronously in background without blocking the UI
+            recalculateWaitingStatusForAll().then(() => {
+                renderScreens(); // Re-render to show updated waiting indicators
+            });
+        }
+
         if (showFeedback) showSyncStatus('Synced successfully', 'success');
     } catch (error) {
         console.error('Sync error:', error);
