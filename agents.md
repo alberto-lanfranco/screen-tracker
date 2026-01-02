@@ -54,18 +54,26 @@ state = {
 {
     id: string,                 // Format: "movie_12345" or "tv_67890" or "manual_timestamp"
     tmdbId: number,             // The Movie Database ID
-    type: string,               // "movie" or "tv"
+    type: string,               // "movie" or "tv" (internal only, not in TSV)
     title: string,
     year: string,               // YYYY format
     posterUrl: string,          // TMDB poster URL (original source)
     cachedPoster: string,       // Base64 data URI of cached poster image for offline use
     overview: string,           // Plot description
     tags: string[],             // User-defined tags and rating (01_stars to 10_stars)
+                                // Note: "movie"/"show" tags are NOT stored in this array internally
+                                // They are added during TSV export and extracted during TSV import
     addedAt: string,            // ISO 8601 timestamp of when screen was added to collection
     finishedAt: string,         // ISO 8601 timestamp of when screen was marked as watched (null if not finished)
     lastWatchedEpisode: string  // Last watched episode for TV shows, format: "s02e06" (null for movies or unwatched shows)
 }
 ```
+
+**Type Handling**:
+- **Internal representation**: Uses `type` property with values "movie" or "tv"
+- **TSV export**: Type is stored as first tag ("movie" or "show") in tags column, no separate type column
+- **TSV import**: Type tag is extracted from tags and converted to internal `type` property ("show" → "tv", "movie" → "movie")
+- **Reserved tags**: "movie" and "show" cannot be added/removed by users manually
 
 **List Status Determination**: Screens are organized into lists based on properties:
 - **To Watch**: `addedAt` is set, no `lastWatchedEpisode` and no `finishedAt`
@@ -239,13 +247,16 @@ Body: {
 - **Filter Controls** (at top of Screens view):
   - Search input to filter screens by title
   - Clear button (X) appears on right side when text is present
-  - Tag filter buttons (dynamic):
-    - List status tags: To Watch, Watching, Watched (always shown first, blue accent when active)
-    - Manual tags: User-defined tags (shown after separator |, orange accent when active, alphabetically sorted)
-    - List tags are mutually exclusive within group
-    - Manual tags are mutually exclusive within group
-    - Can combine one list tag + one manual tag
-    - Tap active tag to deselect (show all)
+  - Tag filter buttons (three sections):
+    - **Type filters**: Movies, Shows (mutually exclusive, shown first)
+    - **List status filters**: To Watch, Watching, Watched (mutually exclusive, shown after first separator |)
+    - **Manual tags**: User-defined tags (non-mutually exclusive, shown after second separator |, alphabetically sorted)
+  - Filter behavior:
+    - Type tags are mutually exclusive (can select Movies OR Shows)
+    - List status tags are mutually exclusive (can select To Watch OR Watching OR Watched)
+    - Manual tags are non-mutually exclusive (can select multiple custom tags)
+    - Can combine filters from different sections (e.g., Movies + Watched + scifi + action)
+    - Tap active tag to deselect (removes that specific filter)
 - **Sort Controls** (in header):
   - Dropdown to select sort field: Date Added (default), Title, Year, Rating
   - Toggle button (↑/↓) to switch between ascending/descending order
@@ -304,13 +315,13 @@ Body: {
 
 #### TSV Structure
 ```tsv
-addedAt	finishedAt	tmdbID	lastWatchedEpisode	tags	type	title	year	posterURL	description
-2025-01-01T10:00:00.000Z		603		scifi,action,09_stars	movie	The Matrix	1999	https://...	A computer hacker...
-2025-01-01T11:00:00.000Z		27205		scifi,thriller	movie	Inception	2010	https://...	A thief who steals...
-2025-01-01T09:00:00.000Z	2025-01-01T20:00:00.000Z	1396	s05e16	10_stars,drama	show	Breaking Bad	2008	https://...	A high school chemistry...
+addedAt	finishedAt	tmdbID	lastWatchedEpisode	tags	title	year	posterURL	description
+2025-01-01T10:00:00.000Z		603		movie,scifi,action,09_stars	The Matrix	1999	https://...	A computer hacker...
+2025-01-01T11:00:00.000Z		27205		movie,scifi,thriller	Inception	2010	https://...	A thief who steals...
+2025-01-01T09:00:00.000Z	2025-01-01T20:00:00.000Z	1396	s05e16	show,10_stars,drama	Breaking Bad	2008	https://...	A high school chemistry...
 ```
 
-- **Columns**: addedAt, finishedAt, tmdbID, lastWatchedEpisode, tags, type, title, year, posterURL, description
+- **Columns**: addedAt, finishedAt, tmdbID, lastWatchedEpisode, tags, title, year, posterURL, description
 - **Delimiter**: Tab character (\t)
 - **Encoding**: UTF-8
 - **Data Model**: Denormalized - TSV stores complete metadata
@@ -318,8 +329,7 @@ addedAt	finishedAt	tmdbID	lastWatchedEpisode	tags	type	title	year	posterURL	desc
   - **finishedAt**: ISO 8601 timestamp (empty for To Watch and Watching)
   - **tmdbID**: The Movie Database ID (for re-fetching if needed)
   - **lastWatchedEpisode**: Last watched episode for TV shows, format "s02e06" (empty for movies or unwatched shows)
-  - **tags**: Comma-separated (includes rating tags like "09_stars")
-  - **type**: "movie" or "show" (internally stored as "tv" for TV shows)
+  - **tags**: Comma-separated; MUST start with "movie" or "show" as first tag (type indicator), followed by rating tags like "09_stars" and user-defined tags
   - **title**: Screen title
   - **year**: Release/first air year (YYYY)
   - **posterURL**: Original TMDB poster URL
@@ -604,7 +614,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **Version Format**: MAJOR.MINOR.PATCH (e.g., 1.0.0)
 - **Location**: `APP_VERSION` constant in `app.js` and `CACHE_VERSION` in `sw.js`
 - **Display**: Shown in Settings tab under "About" section
-- **Current Version**: 1.9.2
+- **Current Version**: 1.10.0
 - **When to Update**:
   - **MAJOR**: Breaking changes, major redesigns, incompatible data format changes
   - **MINOR**: New features, significant additions (e.g., episode tracking, new views)
@@ -639,9 +649,10 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
    - Mention any breaking changes or migrations
 
 ### Version History
+- **1.10.0** (2026-01-02): Refactored type handling to use movie/show as special reserved tags instead of a separate TSV column. Removed 'type' column from TSV format - type is now stored as the first tag ('movie' or 'show') in the tags column. Internally, screens still use the `type` property ('movie' or 'tv'), but TSV export/import now handles the conversion. Updated filter UI to have three distinct sections: Type filters (Movies/Shows - mutually exclusive), List status filters (To Watch/Watching/Watched - mutually exclusive), and Manual tags (non-mutually exclusive). Users can now combine filters across sections (e.g., Movies + Watched + scifi). Added validation to prevent users from manually adding/removing reserved tags (movie, show, rating tags). Updated `screensToTSV()` to export type as first tag, `tsvToScreens()` to extract type from tags, `getAllUniqueTags()` to exclude type tags, and filter rendering/logic to support three-section structure. **Breaking change**: TSV format updated - column count changed from 10 to 9 columns, existing gists will automatically convert on sync.
 - **1.9.2** (2026-01-02): Fixed bug where marking an episode as watched would reset season fold states. Previously, `updateLastWatchedEpisode()` re-rendered the entire episode list, causing all seasons to return to their default (expanded) state. Now uses in-place DOM updates to modify episode watched states without re-rendering, preserving the user's chosen fold/unfold state for each season during the modal session. Changed from calling `fetchAndDisplayEpisodes()` to directly updating CSS classes on existing episode items.
 - **1.9.1** (2026-01-02): Changed episode list default state to expanded. All seasons now display as unfolded by default when viewing TV show details, making episodes immediately visible. Added `expanded` class to season headers and set initial display to `block` instead of `none`.
-- **1.9.0** (2026-01-02): Simplified state management by removing `startedAt` timestamp. "Watching" status is now exclusively for TV shows with episode tracking (`lastWatchedEpisode` set). Movies only have "To Watch" and "Watched" states. Updated `getScreenListStatus()` to check `type === 'tv' && lastWatchedEpisode` for watching status. Updated `setListTimestamps()` to remove startedAt handling. Removed `startedAt` column from TSV sync format (now: addedAt, finishedAt, tmdbID, lastWatchedEpisode, tags, type, title, year, posterURL, description). Hidden "Watching" pill segment for movies in detail modal. Updated screen object structure documentation. **Breaking change**: TSV format updated - existing gists need re-sync.
+- **1.9.0** (2026-01-02): Simplified state management by removing `startedAt` timestamp. "Watching" status is now exclusively for TV shows with episode tracking (`lastWatchedEpisode` set). Movies only have "To Watch" and "Watched" states. Updated `getScreenListStatus()` to check `type === 'tv' && lastWatchedEpisode` for watching status. Updated `setListTimestamps()` to remove startedAt handling. Removed `startedAt` column from TSV sync format. Hidden "Watching" pill segment for movies in detail modal. Updated screen object structure documentation. **Breaking change**: TSV format updated - existing gists need re-sync.
 - **1.8.0** (2026-01-02): Added episode tracking for TV shows. Users can now mark episodes as watched by clicking a checkmark button next to each episode. The app tracks the last watched episode in format 's02e06' and visually marks all episodes up to and including the last watched episode with a checkmark. Added `lastWatchedEpisode` field to screen data structure and TSV sync format (new column after tmdbID). Added helper functions: `parseEpisodeCode()`, `formatEpisodeCode()`, `isEpisodeWatched()`, and `updateLastWatchedEpisode()`. Updated `fetchAndDisplayEpisodes()` to render watch buttons and handle watch state. Added comprehensive CSS styling for watched episodes and watch buttons. **Breaking change**: TSV format updated - existing gists will need to be re-synced.
 - **1.7.0** (2026-01-02): Added full episode list display for TV shows in detail modal. When viewing a TV show, the detail modal now fetches and displays all episodes grouped by season in collapsible accordions. Each episode shows episode number, title, air date, and overview. Episodes are fetched on-demand from TMDB API using the `append_to_response` parameter to efficiently retrieve multiple seasons in a single API call (up to 20 seasons). Season 0 (specials) is excluded. Added new functions: `fetchTVEpisodes()` and `fetchAndDisplayEpisodes()`. Added comprehensive CSS styling for episodes section including season headers, episode items, and responsive design.
 - **1.6.0** (2026-01-02): Implemented proper 2-way sync for GitHub Gist. Previously, sync only pushed local data to Gist, causing data loss when using multiple devices (they would overwrite each other). Now implements pull-merge-push cycle: (1) pulls current Gist content, (2) merges with local data using timestamp-based conflict resolution, (3) updates local state with merged data, (4) pushes merged result to Gist. Merge strategy uses screen ID as unique key and picks the version with the most recent timestamp when conflicts occur. This ensures data converges across devices. Added `getLatestTimestamp()` and `mergeScreens()` helper functions.
@@ -651,7 +662,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **1.5.2** (2026-01-02): Fixed critical bug preventing detail modal from working. The `setupDetailModalListeners` function was referencing `content` and `displayScreen` variables that were not in scope, causing ReferenceErrors. Added local definitions of these variables at the beginning of the function: `content` is retrieved from DOM, and `displayScreen` is derived from `existingScreen || screen`.
 - **1.5.1** (2026-01-02): Fixed bug where screen detail modal wasn't showing when clicking on items in lists. The normal view template was still using old star rating HTML instead of the new `ratingSection` variable with tap-to-edit interface. Replaced inline star rating HTML with `${ratingSection}` variable.
 - **1.5.0** (2026-01-02): Updated rating input to use tap-to-edit number field interface. Replaced the 10-star tappable interface with a more streamlined approach: displays rating as "⭐ 5/10" (or "⭐ ?/10" when unset) matching the list view style. Tap the rating to convert it to a numerical input field (1-10). Save rating on blur or Enter key, cancel on Escape. Supports clearing rating by leaving input empty. Added `updateScreenRating()` function. Updated rating display and input styles in styles.css.
-- **1.4.0** (2026-01-02): Restructured TSV cloud sync format. Reordered columns to prioritize timestamps and metadata: addedAt, startedAt, finishedAt, tmdbID, tags, type, title, year, posterURL, description. Renamed columns from title-case with spaces to camelCase (e.g., "Added At" → "addedAt", "Poster URL" → "posterURL", "Overview" → "description"). Removed "Cached Poster" column from sync (remains local-only). Updated `screensToTSV()` and `tsvToScreens()` functions. **Breaking change**: Existing gists will need to be re-synced with new format.
+- **1.4.0** (2026-01-02): Restructured TSV cloud sync format. Reordered columns to prioritize timestamps and metadata. Renamed columns from title-case with spaces to camelCase (e.g., "Added At" → "addedAt", "Poster URL" → "posterURL", "Overview" → "description"). Removed "Cached Poster" column from sync (remains local-only). Updated `screensToTSV()` and `tsvToScreens()` functions. **Breaking change**: Existing gists will need to be re-synced with new format.
 - **1.3.1** (2026-01-02): Changed "Add to List" button label to just "Add" in search result detail modal for improved UI simplicity and consistency.
 - **1.3.0** (2026-01-01): Implemented full edit functionality for tracked screens. Added `updateScreenMetadata()` function to update screen properties (title, type, year, overview, poster URL). Edit button now opens edit mode with editable input fields. Users can modify all screen metadata and save changes. Poster cache is automatically updated when poster URL is changed. Cancel button returns to normal view without saving changes.
 - **1.2.0** (2025-01-01): Updated UI to match book-tracker reference. Changed rating display in list view from full stars to emoji format (⭐ 8/10). Added edit button in detail modal for tracked screens (circular button between pill selector and delete button). Reordered detail modal elements: header, action buttons, tags, rating (only for watched), description. Rating now only shown for watched screens. Edit button shows placeholder alert (full edit functionality to be implemented).

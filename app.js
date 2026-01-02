@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.9.2';
+const APP_VERSION = '1.10.0';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -104,8 +104,8 @@ function getAllUniqueTags() {
     state.screens.forEach(screen => {
         if (screen.tags) {
             screen.tags.forEach(tag => {
-                // Exclude rating tags
-                if (!tag.match(/^\d{2}_stars$/)) {
+                // Exclude rating tags and type tags (movie/show)
+                if (!tag.match(/^\d{2}_stars$/) && tag !== 'movie' && tag !== 'show') {
                     tags.add(tag);
                 }
             });
@@ -578,7 +578,9 @@ function setupEventListeners() {
             if (!button) return;
 
             const filterTag = button.dataset.tag;
+            const isTypeTag = ['movie', 'show'].includes(filterTag);
             const isListTag = ['to_watch', 'watching', 'watched'].includes(filterTag);
+            const isManualTag = !isTypeTag && !isListTag;
 
             // Toggle selection
             if (button.classList.contains('active')) {
@@ -586,26 +588,24 @@ function setupEventListeners() {
                 button.classList.remove('active');
                 state.filterTags = state.filterTags.filter(t => t !== filterTag);
             } else {
-                // Select this tag
-                if (isListTag) {
-                    // Deselect other list tags
+                // Select this tag based on its type
+                if (isTypeTag) {
+                    // Type tags are mutually exclusive
+                    tagFiltersContainer.querySelectorAll('.tag-filter.type-tag').forEach(btn => {
+                        btn.classList.remove('active');
+                    });
+                    state.filterTags = state.filterTags.filter(t => !['movie', 'show'].includes(t));
+                } else if (isListTag) {
+                    // List status tags are mutually exclusive
                     tagFiltersContainer.querySelectorAll('.tag-filter').forEach(btn => {
                         const btnTag = btn.dataset.tag;
                         if (['to_watch', 'watching', 'watched'].includes(btnTag)) {
                             btn.classList.remove('active');
                         }
                     });
-                    // Remove other list tags from filterTags
                     state.filterTags = state.filterTags.filter(t => !['to_watch', 'watching', 'watched'].includes(t));
-                } else {
-                    // Deselect other manual tags
-                    tagFiltersContainer.querySelectorAll('.tag-filter.manual-tag').forEach(btn => {
-                        btn.classList.remove('active');
-                    });
-                    // Remove other manual tags from filterTags
-                    const listTags = ['to_watch', 'watching', 'watched'];
-                    state.filterTags = state.filterTags.filter(t => listTags.includes(t));
                 }
+                // Manual tags are non-mutually exclusive, so no need to deselect others
 
                 state.filterTags.push(filterTag);
                 button.classList.add('active');
@@ -852,7 +852,7 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
     let tagsSection = '';
     if (isInList) {
         const allTags = displayScreen.tags || [];
-        const displayTags = allTags.filter(tag => !tag.match(/^\d{2}_stars$/));
+        const displayTags = allTags.filter(tag => !tag.match(/^\d{2}_stars$/) && tag !== 'movie' && tag !== 'show');
         const tagPills = displayTags.map(tag => `<span class="tag-pill">${tag}<button class="tag-remove" data-tag="${tag}">×</button></span>`).join('');
 
         tagsSection = `
@@ -1020,7 +1020,7 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
             <div class="detail-tags">
                 <label>Tags</label>
                 <div class="tags-container">
-                    ${(existingScreen.tags || []).filter(t => !t.match(/^\d{2}_stars$/)).map(tag => `
+                    ${(existingScreen.tags || []).filter(t => !t.match(/^\d{2}_stars$/) && t !== 'movie' && t !== 'show').map(tag => `
                         <span class="tag-pill">
                             ${tag}
                             <button class="tag-remove" data-tag="${tag}">×</button>
@@ -1298,6 +1298,12 @@ function setupDetailModalListeners(screen) {
             if (e.key === 'Enter') {
                 const tag = newTagInput.value.trim().toLowerCase().replace(/\s+/g, '_');
 
+                // Prevent adding reserved tags (movie, show, rating tags)
+                if (tag === 'movie' || tag === 'show' || tag.match(/^\d{2}_stars$/)) {
+                    alert('This tag is reserved and cannot be added manually.');
+                    return;
+                }
+
                 if (tag && existingScreen) {
                     if (!existingScreen.tags) existingScreen.tags = [];
                     if (!existingScreen.tags.includes(tag)) {
@@ -1352,6 +1358,13 @@ function renderScreens() {
     if (state.filterTags.length > 0) {
         filteredScreens = filteredScreens.filter(screen => {
             return state.filterTags.every(filterTag => {
+                // Check type tags (movie/show)
+                if (filterTag === 'movie') {
+                    return screen.type === 'movie';
+                }
+                if (filterTag === 'show') {
+                    return screen.type === 'tv';
+                }
                 // Check list status tags
                 if (['to_watch', 'watching', 'watched'].includes(filterTag)) {
                     return getScreenListStatus(screen) === filterTag;
@@ -1426,9 +1439,9 @@ function renderScreens() {
                         <div class="screen-meta">${typeLabel}${screen.year ? ` • ${screen.year}` : ''}</div>
                         ${listStatus ? `<div class="screen-status">${statusLabels[listStatus]}</div>` : ''}
                         ${rating ? `<div class="screen-rating">⭐ ${rating}/10</div>` : ''}
-                        ${screen.tags && screen.tags.filter(t => !t.match(/^\d{2}_stars$/)).length > 0 ? `
+                        ${screen.tags && screen.tags.filter(t => !t.match(/^\d{2}_stars$/) && t !== 'movie' && t !== 'show').length > 0 ? `
                             <div class="screen-tags">
-                                ${screen.tags.filter(t => !t.match(/^\d{2}_stars$/)).map(tag => `<span class="tag-badge">${tag}</span>`).join('')}
+                                ${screen.tags.filter(t => !t.match(/^\d{2}_stars$/) && t !== 'movie' && t !== 'show').map(tag => `<span class="tag-badge">${tag}</span>`).join('')}
                             </div>
                         ` : ''}
                     </div>
@@ -1454,20 +1467,27 @@ function renderTagFilters() {
     const tagFiltersContainer = document.getElementById('tagFilters');
     if (!tagFiltersContainer) return;
 
-    // Get all unique tags
+    // Get all unique tags (excludes rating tags and movie/show tags)
     const uniqueTags = getAllUniqueTags();
 
     // Build filters HTML
     const filters = [];
 
-    // List status filters
+    // Type filters (Movies/Shows) - mutually exclusive
+    filters.push(`
+        <button class="tag-filter type-tag ${state.filterTags.includes('movie') ? 'active' : ''}" data-tag="movie">Movies</button>
+        <button class="tag-filter type-tag ${state.filterTags.includes('show') ? 'active' : ''}" data-tag="show">Shows</button>
+    `);
+
+    // List status filters - mutually exclusive
+    filters.push('<span class="tag-separator">|</span>');
     filters.push(`
         <button class="tag-filter ${state.filterTags.includes('to_watch') ? 'active' : ''}" data-tag="to_watch">To Watch</button>
         <button class="tag-filter ${state.filterTags.includes('watching') ? 'active' : ''}" data-tag="watching">Watching</button>
         <button class="tag-filter ${state.filterTags.includes('watched') ? 'active' : ''}" data-tag="watched">Watched</button>
     `);
 
-    // Manual tags
+    // Manual tags - non-mutually exclusive
     if (uniqueTags.length > 0) {
         filters.push('<span class="tag-separator">|</span>');
         uniqueTags.forEach(tag => {
@@ -1755,17 +1775,19 @@ async function syncWithGitHub(showFeedback = true) {
 
 // Convert screens to TSV format
 function screensToTSV(screens) {
-    const header = 'addedAt\tfinishedAt\ttmdbID\tlastWatchedEpisode\ttags\ttype\ttitle\tyear\tposterURL\tdescription';
+    const header = 'addedAt\tfinishedAt\ttmdbID\tlastWatchedEpisode\ttags\ttitle\tyear\tposterURL\tdescription';
     const rows = screens.map(screen => {
-        // Map 'tv' to 'show' for TSV export
-        const tsvType = screen.type === 'tv' ? 'show' : screen.type;
+        // Ensure movie/show tag is first in tags array
+        const typeTag = screen.type === 'tv' ? 'show' : 'movie';
+        const otherTags = (screen.tags || []).filter(t => t !== 'movie' && t !== 'show');
+        const allTags = [typeTag, ...otherTags];
+
         return [
             screen.addedAt || '',
             screen.finishedAt || '',
             screen.tmdbId || '',
             screen.lastWatchedEpisode || '',
-            (screen.tags || []).join(','),
-            tsvType || '',
+            allTags.join(','),
             screen.title || '',
             screen.year || '',
             screen.posterUrl || '',
@@ -1787,22 +1809,27 @@ function tsvToScreens(tsv) {
         if (!line) continue;
 
         const parts = line.split('\t');
-        if (parts.length < 10) continue;
+        if (parts.length < 9) continue;
 
-        // Map 'show' back to 'tv' for internal representation
-        const internalType = parts[5] === 'show' ? 'tv' : parts[5];
+        // Extract tags and determine type from first tag (movie or show)
+        const tags = parts[4] ? parts[4].split(',').filter(t => t) : [];
+        const typeTag = tags.find(t => t === 'movie' || t === 'show');
+        const internalType = typeTag === 'show' ? 'tv' : 'movie';
+
+        // Remove movie/show from tags as they're stored in the type property internally
+        const filteredTags = tags.filter(t => t !== 'movie' && t !== 'show');
 
         const screen = {
             addedAt: parts[0],
             finishedAt: parts[1],
             tmdbId: parts[2],
             lastWatchedEpisode: parts[3] || null,
-            tags: parts[4] ? parts[4].split(',').filter(t => t) : [],
+            tags: filteredTags,
             type: internalType,
-            title: parts[6],
-            year: parts[7],
-            posterUrl: parts[8],
-            overview: parts[9]
+            title: parts[5],
+            year: parts[6],
+            posterUrl: parts[7],
+            overview: parts[8]
         };
 
         // Generate ID
