@@ -768,31 +768,44 @@ body.keyboard-open .bottom-nav {
     color: var(--text-primary);
 }
 
-.star-rating {
+.rating-display-wrapper {
     display: flex;
-    gap: 8px;
     align-items: center;
 }
 
-.star {
-    font-size: 32px;
+.rating-display {
+    font-size: 18px;
+    color: var(--accent);
+    font-weight: 600;
     cursor: pointer;
-    color: var(--text-tertiary);
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--bg-primary);
     transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     user-select: none;
     -webkit-tap-highlight-color: transparent;
 }
 
-.star:active {
-    transform: scale(0.9);
+.rating-display:hover {
+    background: var(--bg-tertiary);
+    transform: scale(1.02);
 }
 
-.star.filled {
-    color: var(--accent);
+.rating-display:active {
+    transform: scale(0.98);
 }
 
-.star:hover {
-    transform: scale(1.1);
+.rating-input {
+    font-size: 18px;
+    color: var(--text-primary);
+    font-weight: 600;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--bg-primary);
+    border: 2px solid var(--accent);
+    width: 80px;
+    outline: none;
+    font-family: inherit;
 }
 
 /* Tags Styles */
@@ -993,14 +1006,6 @@ body.keyboard-open .bottom-nav {
     
     .settings-section h2 {
         font-size: 18px;
-    }
-    
-    .star-rating {
-        gap: 4px;
-    }
-    
-    .star {
-        font-size: 28px;
     }
 }
 
