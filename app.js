@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.3.1';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -883,7 +883,7 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
                         <line x1="12" y1="8" x2="12" y2="16"></line>
                         <line x1="8" y1="12" x2="16" y2="12"></line>
                     </svg>
-                    <span>Add to List</span>
+                    <span>Add</span>
                 </button>
             `}
         </div>

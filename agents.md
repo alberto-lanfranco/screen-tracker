@@ -557,7 +557,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **Version Format**: MAJOR.MINOR.PATCH (e.g., 1.0.0)
 - **Location**: `APP_VERSION` constant in `app.js` and `CACHE_VERSION` in `sw.js`
 - **Display**: Shown in Settings tab under "About" section
-- **Current Version**: 1.3.0
+- **Current Version**: 1.3.1
 - **When to Update**:
   - **MAJOR**: Breaking changes, major redesigns, incompatible data format changes
   - **MINOR**: New features, significant additions (e.g., episode tracking, new views)
@@ -592,6 +592,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
    - Mention any breaking changes or migrations
 
 ### Version History
+- **1.3.1** (2026-01-02): Changed "Add to List" button label to just "Add" in search result detail modal for improved UI simplicity and consistency.
 - **1.3.0** (2026-01-01): Implemented full edit functionality for tracked screens. Added `updateScreenMetadata()` function to update screen properties (title, type, year, overview, poster URL). Edit button now opens edit mode with editable input fields. Users can modify all screen metadata and save changes. Poster cache is automatically updated when poster URL is changed. Cancel button returns to normal view without saving changes.
 - **1.2.0** (2025-01-01): Updated UI to match book-tracker reference. Changed rating display in list view from full stars to emoji format (⭐ 8/10). Added edit button in detail modal for tracked screens (circular button between pill selector and delete button). Reordered detail modal elements: header, action buttons, tags, rating (only for watched), description. Rating now only shown for watched screens. Edit button shows placeholder alert (full edit functionality to be implemented).
 - **1.1.2** (2025-01-01): Fixed poster sizing and add button styling to match book-tracker layout. Search result posters now 60x90px (was using wrong class name). Fixed add button styling in detail modal. Changed class from `screen-poster` to `screen-cover` to match CSS. Fixed `.btn-add-book` → `.btn-add-screen` in CSS.
