@@ -1854,3 +1854,74 @@ body.keyboard-open .bottom-nav {
         font-size: 14px;
     }
 }
+
+/* Episode Watch Button */
+.episode-watch-btn {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-tertiary);
+    border: 2px solid var(--separator);
+    border-radius: 50%;
+    color: transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.episode-watch-btn:hover {
+    background: var(--bg-primary);
+    border-color: var(--accent);
+}
+
+.episode-watch-btn:active {
+    transform: scale(0.9);
+}
+
+.episode-watch-btn.watched {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.episode-watch-btn.watched svg {
+    display: block;
+}
+
+.episode-watch-btn:not(.watched) svg {
+    display: none;
+}
+
+.episode-watch-btn.watched:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
+/* Watched Episode Styling */
+.episode-item.watched {
+    opacity: 0.7;
+}
+
+.episode-item.watched .episode-number {
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+}
+
+.episode-item.watched .episode-title {
+    color: var(--text-secondary);
+}
+
+@media (max-width: 480px) {
+    .episode-watch-btn {
+        width: 28px;
+        height: 28px;
+    }
+
+    .episode-watch-btn svg {
+        width: 14px;
+        height: 14px;
+    }
+}

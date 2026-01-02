@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.8.0';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -28,6 +28,47 @@ function setRatingTag(tags, rating) {
         tagsWithoutRating.push(ratingTag);
     }
     return tagsWithoutRating;
+}
+
+// Helper functions for episode tracking
+function parseEpisodeCode(code) {
+    if (!code) return null;
+    const match = code.match(/^s(\d+)e(\d+)$/i);
+    if (!match) return null;
+    return {
+        season: parseInt(match[1]),
+        episode: parseInt(match[2])
+    };
+}
+
+function formatEpisodeCode(season, episode) {
+    return `s${season.toString().padStart(2, '0')}e${episode.toString().padStart(2, '0')}`;
+}
+
+function isEpisodeWatched(episodeSeason, episodeNumber, lastWatchedCode) {
+    if (!lastWatchedCode) return false;
+
+    const lastWatched = parseEpisodeCode(lastWatchedCode);
+    if (!lastWatched) return false;
+
+    // Episode is watched if it's before or equal to the last watched episode
+    if (episodeSeason < lastWatched.season) return true;
+    if (episodeSeason === lastWatched.season && episodeNumber <= lastWatched.episode) return true;
+
+    return false;
+}
+
+function updateLastWatchedEpisode(screenId, season, episode) {
+    const screen = state.screens.find(s => s.id === screenId);
+    if (screen) {
+        screen.lastWatchedEpisode = formatEpisodeCode(season, episode);
+        saveToLocalStorage();
+
+        // Re-render episodes to update UI
+        if (screen.tmdbId) {
+            fetchAndDisplayEpisodes(screen.tmdbId, screenId);
+        }
+    }
 }
 
 // Helper functions for determining screen list status from timestamps
@@ -992,12 +1033,12 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
 
     // Fetch and display episodes for TV shows
     if (displayScreen.type === 'tv' && displayScreen.tmdbId && !editMode) {
-        fetchAndDisplayEpisodes(displayScreen.tmdbId);
+        fetchAndDisplayEpisodes(displayScreen.tmdbId, displayScreen.id);
     }
 }
 
 // Fetch and display episodes for a TV show
-async function fetchAndDisplayEpisodes(tmdbId) {
+async function fetchAndDisplayEpisodes(tmdbId, screenId) {
     const episodesContainer = document.getElementById('episodesList');
     if (!episodesContainer) return;
 
@@ -1007,6 +1048,10 @@ async function fetchAndDisplayEpisodes(tmdbId) {
         episodesContainer.innerHTML = '<div class="episodes-empty">No episode data available</div>';
         return;
     }
+
+    // Get the screen to access lastWatchedEpisode
+    const screen = state.screens.find(s => s.id === screenId);
+    const lastWatchedEpisode = screen ? screen.lastWatchedEpisode : null;
 
     // Build episodes HTML grouped by season
     let episodesHTML = '<div class="episodes-header">Episodes</div>';
@@ -1025,16 +1070,28 @@ async function fetchAndDisplayEpisodes(tmdbId) {
                     </svg>
                 </button>
                 <div class="episodes-list" data-season="${season.season_number}" style="display: none;">
-                    ${episodes.map(ep => `
-                        <div class="episode-item">
+                    ${episodes.map(ep => {
+                        const watched = isEpisodeWatched(season.season_number, ep.episode_number, lastWatchedEpisode);
+                        return `
+                        <div class="episode-item ${watched ? 'watched' : ''}">
                             <div class="episode-number">${ep.episode_number}</div>
                             <div class="episode-info">
                                 <div class="episode-title">${ep.name || 'Untitled'}</div>
                                 <div class="episode-meta">${ep.air_date || 'No date'}</div>
                                 ${ep.overview ? `<div class="episode-overview">${ep.overview}</div>` : ''}
                             </div>
+                            <button class="episode-watch-btn ${watched ? 'watched' : ''}"
+                                    data-screen-id="${screenId}"
+                                    data-season="${season.season_number}"
+                                    data-episode="${ep.episode_number}"
+                                    title="Mark as last watched">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                            </button>
                         </div>
-                    `).join('')}
+                        `;
+                    }).join('')}
                 </div>
             </div>
         `;
@@ -1054,6 +1111,17 @@ async function fetchAndDisplayEpisodes(tmdbId) {
                 episodesList.style.display = isVisible ? 'none' : 'block';
                 header.classList.toggle('expanded', !isVisible);
             }
+        });
+    });
+
+    // Add click handlers for episode watch buttons
+    episodesContainer.querySelectorAll('.episode-watch-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const screenId = btn.dataset.screenId;
+            const season = parseInt(btn.dataset.season);
+            const episode = parseInt(btn.dataset.episode);
+            updateLastWatchedEpisode(screenId, season, episode);
         });
     });
 }
@@ -1668,7 +1736,7 @@ async function syncWithGitHub(showFeedback = true) {
 
 // Convert screens to TSV format
 function screensToTSV(screens) {
-    const header = 'addedAt\tstartedAt\tfinishedAt\ttmdbID\ttags\ttype\ttitle\tyear\tposterURL\tdescription';
+    const header = 'addedAt\tstartedAt\tfinishedAt\ttmdbID\tlastWatchedEpisode\ttags\ttype\ttitle\tyear\tposterURL\tdescription';
     const rows = screens.map(screen => {
         // Map 'tv' to 'show' for TSV export
         const tsvType = screen.type === 'tv' ? 'show' : screen.type;
@@ -1677,6 +1745,7 @@ function screensToTSV(screens) {
             screen.startedAt || '',
             screen.finishedAt || '',
             screen.tmdbId || '',
+            screen.lastWatchedEpisode || '',
             (screen.tags || []).join(','),
             tsvType || '',
             screen.title || '',
@@ -1700,22 +1769,23 @@ function tsvToScreens(tsv) {
         if (!line) continue;
 
         const parts = line.split('\t');
-        if (parts.length < 10) continue;
+        if (parts.length < 11) continue;
 
         // Map 'show' back to 'tv' for internal representation
-        const internalType = parts[5] === 'show' ? 'tv' : parts[5];
+        const internalType = parts[6] === 'show' ? 'tv' : parts[6];
 
         const screen = {
             addedAt: parts[0],
             startedAt: parts[1],
             finishedAt: parts[2],
             tmdbId: parts[3],
-            tags: parts[4] ? parts[4].split(',').filter(t => t) : [],
+            lastWatchedEpisode: parts[4] || null,
+            tags: parts[5] ? parts[5].split(',').filter(t => t) : [],
             type: internalType,
-            title: parts[6],
-            year: parts[7],
-            posterUrl: parts[8],
-            overview: parts[9]
+            title: parts[7],
+            year: parts[8],
+            posterUrl: parts[9],
+            overview: parts[10]
         };
 
         // Generate ID
