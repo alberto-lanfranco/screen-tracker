@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.5.1';
+const APP_VERSION = '1.5.2';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -935,8 +935,10 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
 
 // Setup event listeners for detail modal
 function setupDetailModalListeners(screen) {
+    const content = document.getElementById('screenDetailContent');
     const existingScreen = state.screens.find(s => s.id === screen.id);
     const isInList = !!existingScreen;
+    const displayScreen = existingScreen || screen;
 
     // Add to list button (for search results)
     const addBtn = document.getElementById('addScreen');

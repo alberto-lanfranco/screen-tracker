@@ -1,4 +1,4 @@
-const CACHE_VERSION = '1.5.1';
+const CACHE_VERSION = '1.5.2';
 const CACHE_NAME = `screen-tracker-v${CACHE_VERSION}`;
 const urlsToCache = [
   '/',
