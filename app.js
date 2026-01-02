@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.5.3';
+const APP_VERSION = '1.5.4';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -1274,6 +1274,9 @@ function saveToLocalStorage() {
     try {
         localStorage.setItem('screenTracker_screens', JSON.stringify(state.screens));
         console.log('Saved to localStorage:', state.screens.length, 'screens');
+
+        // Automatically sync to GitHub Gist (silent push)
+        syncWithGitHub(false);
     } catch (e) {
         console.error('Failed to save to localStorage:', e);
     }
