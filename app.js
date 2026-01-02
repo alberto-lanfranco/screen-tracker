@@ -119,6 +119,9 @@ function updateLastWatchedEpisode(screenId, season, episode) {
         }
 
         saveToLocalStorage();
+
+        // Re-render the screens list so the waiting message appears immediately
+        renderScreens();
     }
 }
 
