@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.13.0';
+const APP_VERSION = '1.13.1';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -119,6 +119,9 @@ function updateLastWatchedEpisode(screenId, season, episode) {
         }
 
         saveToLocalStorage();
+
+        // Re-render the screens list so the waiting message appears immediately
+        renderScreens();
     }
 }
 
