@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.9.1';
+const APP_VERSION = '1.9.2';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -64,10 +64,28 @@ function updateLastWatchedEpisode(screenId, season, episode) {
         screen.lastWatchedEpisode = formatEpisodeCode(season, episode);
         saveToLocalStorage();
 
-        // Re-render episodes to update UI
-        if (screen.tmdbId) {
-            fetchAndDisplayEpisodes(screen.tmdbId, screenId);
-        }
+        // Update episode UI in-place without re-rendering (preserves fold state)
+        const episodesContainer = document.getElementById('episodesList');
+        if (!episodesContainer) return;
+
+        // Update all episode items to reflect new watched state
+        episodesContainer.querySelectorAll('.episode-item').forEach(episodeItem => {
+            const btn = episodeItem.querySelector('.episode-watch-btn');
+            if (!btn) return;
+
+            const epSeason = parseInt(btn.dataset.season);
+            const epNumber = parseInt(btn.dataset.episode);
+            const watched = isEpisodeWatched(epSeason, epNumber, screen.lastWatchedEpisode);
+
+            // Update episode item classes
+            if (watched) {
+                episodeItem.classList.add('watched');
+                btn.classList.add('watched');
+            } else {
+                episodeItem.classList.remove('watched');
+                btn.classList.remove('watched');
+            }
+        });
     }
 }
 

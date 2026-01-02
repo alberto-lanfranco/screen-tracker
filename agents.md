@@ -604,7 +604,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **Version Format**: MAJOR.MINOR.PATCH (e.g., 1.0.0)
 - **Location**: `APP_VERSION` constant in `app.js` and `CACHE_VERSION` in `sw.js`
 - **Display**: Shown in Settings tab under "About" section
-- **Current Version**: 1.9.1
+- **Current Version**: 1.9.2
 - **When to Update**:
   - **MAJOR**: Breaking changes, major redesigns, incompatible data format changes
   - **MINOR**: New features, significant additions (e.g., episode tracking, new views)
@@ -639,6 +639,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
    - Mention any breaking changes or migrations
 
 ### Version History
+- **1.9.2** (2026-01-02): Fixed bug where marking an episode as watched would reset season fold states. Previously, `updateLastWatchedEpisode()` re-rendered the entire episode list, causing all seasons to return to their default (expanded) state. Now uses in-place DOM updates to modify episode watched states without re-rendering, preserving the user's chosen fold/unfold state for each season during the modal session. Changed from calling `fetchAndDisplayEpisodes()` to directly updating CSS classes on existing episode items.
 - **1.9.1** (2026-01-02): Changed episode list default state to expanded. All seasons now display as unfolded by default when viewing TV show details, making episodes immediately visible. Added `expanded` class to season headers and set initial display to `block` instead of `none`.
 - **1.9.0** (2026-01-02): Simplified state management by removing `startedAt` timestamp. "Watching" status is now exclusively for TV shows with episode tracking (`lastWatchedEpisode` set). Movies only have "To Watch" and "Watched" states. Updated `getScreenListStatus()` to check `type === 'tv' && lastWatchedEpisode` for watching status. Updated `setListTimestamps()` to remove startedAt handling. Removed `startedAt` column from TSV sync format (now: addedAt, finishedAt, tmdbID, lastWatchedEpisode, tags, type, title, year, posterURL, description). Hidden "Watching" pill segment for movies in detail modal. Updated screen object structure documentation. **Breaking change**: TSV format updated - existing gists need re-sync.
 - **1.8.0** (2026-01-02): Added episode tracking for TV shows. Users can now mark episodes as watched by clicking a checkmark button next to each episode. The app tracks the last watched episode in format 's02e06' and visually marks all episodes up to and including the last watched episode with a checkmark. Added `lastWatchedEpisode` field to screen data structure and TSV sync format (new column after tmdbID). Added helper functions: `parseEpisodeCode()`, `formatEpisodeCode()`, `isEpisodeWatched()`, and `updateLastWatchedEpisode()`. Updated `fetchAndDisplayEpisodes()` to render watch buttons and handle watch state. Added comprehensive CSS styling for watched episodes and watch buttons. **Breaking change**: TSV format updated - existing gists will need to be re-synced.
