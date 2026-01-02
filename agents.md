@@ -65,7 +65,8 @@ state = {
                                 // They are added during TSV export and extracted during TSV import
     addedAt: string,            // ISO 8601 timestamp of when screen was added to collection
     finishedAt: string,         // ISO 8601 timestamp of when screen was marked as watched (null if not finished)
-    lastWatchedEpisode: string  // Last watched episode for TV shows, format: "s02e06" (null for movies or unwatched shows)
+    lastWatchedEpisode: string, // Last watched episode for TV shows, format: "s02e06" (null for movies or unwatched shows)
+    waitingForNewEpisodes: boolean  // True if watching TV show has caught up with available episodes or next episode is in future (calculated dynamically, not synced to cloud)
 }
 ```
 
@@ -265,6 +266,7 @@ Body: {
   - Poster image (if available)
   - Title, type, year
   - List status label (To Watch/Watching/Watched)
+  - Waiting indicator (⏳ waiting for new episodes) - shown for watching TV shows that have caught up with available episodes or next episode is in future
   - Rating (★ X/10) - displayed only for watched screens
   - Tags (colored badges) - rating tags hidden from display
 - Tap card to open detail modal
@@ -618,7 +620,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **Version Format**: MAJOR.MINOR.PATCH (e.g., 1.0.0)
 - **Location**: `APP_VERSION` constant in `app.js` and `CACHE_VERSION` in `sw.js`
 - **Display**: Shown in Settings tab under "About" section
-- **Current Version**: 1.12.0
+- **Current Version**: 1.13.0
 - **When to Update**:
   - **MAJOR**: Breaking changes, major redesigns, incompatible data format changes
   - **MINOR**: New features, significant additions (e.g., episode tracking, new views)
@@ -653,6 +655,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
    - Mention any breaking changes or migrations
 
 ### Version History
+- **1.13.0** (2026-01-02): Added "waiting for new episodes" indicator for TV shows in Screens list view. When a TV show is marked as "Watching" and the last watched episode is either the final available episode or the next episode has a future air date, the list view now displays "⏳ waiting for new episodes" below the "Watching" status label. The waiting status is calculated when the detail modal is opened (episodes are fetched) and when episodes are marked as watched. Added `checkIfWaitingForNewEpisodes()` function to determine waiting status, updated `fetchAndDisplayEpisodes()` to calculate and store the status in `screen.waitingForNewEpisodes` property, modified `updateLastWatchedEpisode()` to recalculate status when episodes are marked as watched, and added CSS styling for the waiting message (.screen-waiting).
 - **1.12.0** (2026-01-02): Made GitHub Gist TSV the single source of truth for cross-device sync. Deletions now properly propagate between devices. Rewrote `mergeScreens()` function to treat remote TSV as authoritative: if a screen is not present in the TSV, it was deleted and should not be restored. Added timestamp-based logic to distinguish between new local additions (added after last sync - keep them) and remotely deleted screens (existed before last sync - remove them). Implemented `lastSyncTime` persistence in localStorage to track when last successful sync occurred. This fixes the issue where deleted screens would reappear when syncing between devices. Screens are now only restored if they were added locally after the last sync, otherwise they're treated as deletions.
 - **1.11.1** (2026-01-02): Fixed two critical bugs. (1) Rating section now appears immediately when marking a screen as "watched" - pill selector click now refreshes the detail modal to show/hide the rating section based on new status. (2) Fixed deletion persistence issue - deleted screens no longer reappear after sync. Changed auto-sync behavior: after local changes (add/delete/edit), sync now does push-only to GitHub Gist instead of pull-merge-push. This prevents deleted items from being restored from remote. Manual sync and startup sync still do full pull-merge-push for cross-device synchronization. Added `pullMerge` parameter to `syncWithGitHub()` function.
 - **1.11.0** (2026-01-02): Added tag suggestions feature to detail modal. When viewing a screen's tags section, users can now tap a dropdown button next to the tag input to see all existing custom tags from their collection. The suggestions panel displays available tags (excluding ones already on the current screen) as clickable chips. Clicking a suggestion instantly adds that tag to the screen. Shows "No available tags" when all tags are already applied or no custom tags exist. Added toggle button with dropdown icon, suggestions panel with chips, click handlers for tag application, and CSS styling including hover effects and animations. This mirrors the book-tracker implementation and makes tag management much easier by avoiding retyping common tags.

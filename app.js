@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.12.0';
+const APP_VERSION = '1.13.0';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -62,31 +62,118 @@ function updateLastWatchedEpisode(screenId, season, episode) {
     const screen = state.screens.find(s => s.id === screenId);
     if (screen) {
         screen.lastWatchedEpisode = formatEpisodeCode(season, episode);
-        saveToLocalStorage();
 
-        // Update episode UI in-place without re-rendering (preserves fold state)
+        // Recalculate waiting status if episodes are currently displayed
         const episodesContainer = document.getElementById('episodesList');
-        if (!episodesContainer) return;
+        if (episodesContainer) {
+            // Extract seasons data from the currently displayed episodes
+            const seasonsData = [];
+            episodesContainer.querySelectorAll('.season-group').forEach(seasonGroup => {
+                const seasonHeader = seasonGroup.querySelector('.season-header');
+                const seasonNum = parseInt(seasonHeader.dataset.season);
+                const episodesList = seasonGroup.querySelector('.episodes-list');
+                const episodes = [];
 
-        // Update all episode items to reflect new watched state
-        episodesContainer.querySelectorAll('.episode-item').forEach(episodeItem => {
-            const btn = episodeItem.querySelector('.episode-watch-btn');
-            if (!btn) return;
+                episodesList.querySelectorAll('.episode-item').forEach(epItem => {
+                    const btn = epItem.querySelector('.episode-watch-btn');
+                    const epNumber = parseInt(btn.dataset.episode);
+                    // Extract air date from the episode meta
+                    const epMeta = epItem.querySelector('.episode-meta');
+                    const airDate = epMeta ? epMeta.textContent : null;
 
-            const epSeason = parseInt(btn.dataset.season);
-            const epNumber = parseInt(btn.dataset.episode);
-            const watched = isEpisodeWatched(epSeason, epNumber, screen.lastWatchedEpisode);
+                    episodes.push({
+                        episode_number: epNumber,
+                        air_date: airDate !== 'No date' ? airDate : null
+                    });
+                });
 
-            // Update episode item classes
-            if (watched) {
-                episodeItem.classList.add('watched');
-                btn.classList.add('watched');
-            } else {
-                episodeItem.classList.remove('watched');
-                btn.classList.remove('watched');
+                seasonsData.push({
+                    season_number: seasonNum,
+                    episodes: episodes
+                });
+            });
+
+            // Recalculate waiting status
+            if (screen.type === 'tv' && getScreenListStatus(screen) === 'watching') {
+                screen.waitingForNewEpisodes = checkIfWaitingForNewEpisodes(seasonsData, screen.lastWatchedEpisode);
             }
-        });
+
+            // Update all episode items to reflect new watched state
+            episodesContainer.querySelectorAll('.episode-item').forEach(episodeItem => {
+                const btn = episodeItem.querySelector('.episode-watch-btn');
+                if (!btn) return;
+
+                const epSeason = parseInt(btn.dataset.season);
+                const epNumber = parseInt(btn.dataset.episode);
+                const watched = isEpisodeWatched(epSeason, epNumber, screen.lastWatchedEpisode);
+
+                // Update episode item classes
+                if (watched) {
+                    episodeItem.classList.add('watched');
+                    btn.classList.add('watched');
+                } else {
+                    episodeItem.classList.remove('watched');
+                    btn.classList.remove('watched');
+                }
+            });
+        }
+
+        saveToLocalStorage();
     }
+}
+
+// Check if a show is waiting for new episodes
+function checkIfWaitingForNewEpisodes(seasonsData, lastWatchedEpisode) {
+    if (!lastWatchedEpisode || !seasonsData || seasonsData.length === 0) {
+        return false;
+    }
+
+    const lastWatched = parseEpisodeCode(lastWatchedEpisode);
+    if (!lastWatched) return false;
+
+    // Find all episodes across all seasons
+    let allEpisodes = [];
+    seasonsData.forEach(season => {
+        if (season.episodes) {
+            season.episodes.forEach(ep => {
+                allEpisodes.push({
+                    season: season.season_number,
+                    episode: ep.episode_number,
+                    airDate: ep.air_date
+                });
+            });
+        }
+    });
+
+    // Sort episodes by season and episode number
+    allEpisodes.sort((a, b) => {
+        if (a.season !== b.season) return a.season - b.season;
+        return a.episode - b.episode;
+    });
+
+    // Find the index of the last watched episode
+    const lastWatchedIndex = allEpisodes.findIndex(ep =>
+        ep.season === lastWatched.season && ep.episode === lastWatched.episode
+    );
+
+    if (lastWatchedIndex === -1) return false;
+
+    // Check if this is the last available episode
+    if (lastWatchedIndex === allEpisodes.length - 1) {
+        return true;
+    }
+
+    // Check if the next episode is in the future
+    const nextEpisode = allEpisodes[lastWatchedIndex + 1];
+    if (nextEpisode && nextEpisode.airDate) {
+        const airDate = new Date(nextEpisode.airDate);
+        const now = new Date();
+        if (airDate > now) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 // Helper functions for determining screen list status from timestamps
@@ -1084,6 +1171,14 @@ async function fetchAndDisplayEpisodes(tmdbId, screenId) {
     const screen = state.screens.find(s => s.id === screenId);
     const lastWatchedEpisode = screen ? screen.lastWatchedEpisode : null;
 
+    // Check if this show is waiting for new episodes and store the result
+    if (screen && screen.type === 'tv' && getScreenListStatus(screen) === 'watching') {
+        const isWaiting = checkIfWaitingForNewEpisodes(seasonsData, lastWatchedEpisode);
+        screen.waitingForNewEpisodes = isWaiting;
+        // Save to localStorage to persist this info
+        saveToLocalStorage();
+    }
+
     // Build episodes HTML grouped by season
     let episodesHTML = '<div class="episodes-header">Episodes</div>';
 
@@ -1492,6 +1587,7 @@ function renderScreens() {
                         <div class="screen-title">${screen.title}</div>
                         <div class="screen-meta">${typeLabel}${screen.year ? ` • ${screen.year}` : ''}</div>
                         ${listStatus ? `<div class="screen-status">${statusLabels[listStatus]}</div>` : ''}
+                        ${listStatus === 'watching' && screen.waitingForNewEpisodes ? `<div class="screen-waiting">⏳ waiting for new episodes</div>` : ''}
                         ${rating ? `<div class="screen-rating">⭐ ${rating}/10</div>` : ''}
                         ${screen.tags && screen.tags.filter(t => !t.match(/^\d{2}_stars$/) && t !== 'movie' && t !== 'show').length > 0 ? `
                             <div class="screen-tags">
