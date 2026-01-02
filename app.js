@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.11.0';
+const APP_VERSION = '1.11.1';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -1224,9 +1224,8 @@ function setupDetailModalListeners(screen) {
                 saveToLocalStorage();
                 renderScreens();
 
-                // Update UI
-                pillSegments.forEach(s => s.classList.remove('active'));
-                segment.classList.add('active');
+                // Refresh detail modal to show/hide rating section
+                showScreenDetail(existingScreen, 'list');
             }
         });
     });
@@ -1559,8 +1558,8 @@ function saveToLocalStorage() {
         localStorage.setItem('screenTracker_screens', JSON.stringify(state.screens));
         console.log('Saved to localStorage:', state.screens.length, 'screens');
 
-        // Automatically sync to GitHub Gist (silent push)
-        syncWithGitHub(false);
+        // Automatically sync to GitHub Gist (push-only, no pull/merge to avoid restoring deleted items)
+        syncWithGitHub(false, false);
     } catch (e) {
         console.error('Failed to save to localStorage:', e);
     }
@@ -1714,7 +1713,7 @@ function mergeScreens(localScreens, remoteScreens) {
     return Array.from(merged.values());
 }
 
-async function syncWithGitHub(showFeedback = true) {
+async function syncWithGitHub(showFeedback = true, pullMerge = true) {
     if (!state.settings.apiToken) {
         if (showFeedback) {
             showSyncStatus('Please configure GitHub token first', 'error');
@@ -1734,9 +1733,10 @@ async function syncWithGitHub(showFeedback = true) {
 
     try {
         let remoteScreens = [];
+        let mergedScreens = state.screens;
 
-        // Step 1: Pull from GitHub Gist (if gist exists)
-        if (state.settings.gistId) {
+        // Step 1: Pull from GitHub Gist (only if pullMerge is true)
+        if (pullMerge && state.settings.gistId) {
             const fetchResponse = await fetch(`https://api.github.com/gists/${state.settings.gistId}`, {
                 headers: {
                     'Authorization': `token ${state.settings.apiToken}`,
@@ -1760,16 +1760,20 @@ async function syncWithGitHub(showFeedback = true) {
             }
         }
 
-        // Step 2: Merge local and remote screens
-        const mergedScreens = mergeScreens(state.screens, remoteScreens);
-        console.log('Merged:', mergedScreens.length, 'screens (local:', state.screens.length, ', remote:', remoteScreens.length, ')');
+        // Step 2: Merge local and remote screens (only if pullMerge is true)
+        if (pullMerge && remoteScreens.length > 0) {
+            mergedScreens = mergeScreens(state.screens, remoteScreens);
+            console.log('Merged:', mergedScreens.length, 'screens (local:', state.screens.length, ', remote:', remoteScreens.length, ')');
 
-        // Step 3: Update local state with merged data
-        state.screens = mergedScreens;
-        localStorage.setItem('screenTracker_screens', JSON.stringify(state.screens));
-        renderScreens();
+            // Step 3: Update local state with merged data
+            state.screens = mergedScreens;
+            localStorage.setItem('screenTracker_screens', JSON.stringify(state.screens));
+            renderScreens();
+        } else {
+            console.log('Push-only sync, using local state:', state.screens.length, 'screens');
+        }
 
-        // Step 4: Push merged data to GitHub Gist
+        // Step 4: Push data to GitHub Gist
         const tsvData = screensToTSV(mergedScreens);
 
         const gistData = {

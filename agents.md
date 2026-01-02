@@ -393,9 +393,9 @@ This ensures data converges across multiple devices without overwriting changes.
 #### Auto-Sync on Change
 1. Any screen operation (add/move/delete/rate/tag)
 2. `saveToLocalStorage()` called
-3. Automatically calls `syncWithGitHub(false)` (silent)
-4. Performs full pull-merge-push cycle
-5. Updates local state with merged result
+3. Automatically calls `syncWithGitHub(false, false)` (silent, push-only)
+4. Pushes current local state to GitHub Gist
+5. Does NOT pull or merge to prevent deleted items from being restored
 
 ### 6. Sorting
 - **Sort Options**:
@@ -615,7 +615,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **Version Format**: MAJOR.MINOR.PATCH (e.g., 1.0.0)
 - **Location**: `APP_VERSION` constant in `app.js` and `CACHE_VERSION` in `sw.js`
 - **Display**: Shown in Settings tab under "About" section
-- **Current Version**: 1.11.0
+- **Current Version**: 1.11.1
 - **When to Update**:
   - **MAJOR**: Breaking changes, major redesigns, incompatible data format changes
   - **MINOR**: New features, significant additions (e.g., episode tracking, new views)
@@ -650,6 +650,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
    - Mention any breaking changes or migrations
 
 ### Version History
+- **1.11.1** (2026-01-02): Fixed two critical bugs. (1) Rating section now appears immediately when marking a screen as "watched" - pill selector click now refreshes the detail modal to show/hide the rating section based on new status. (2) Fixed deletion persistence issue - deleted screens no longer reappear after sync. Changed auto-sync behavior: after local changes (add/delete/edit), sync now does push-only to GitHub Gist instead of pull-merge-push. This prevents deleted items from being restored from remote. Manual sync and startup sync still do full pull-merge-push for cross-device synchronization. Added `pullMerge` parameter to `syncWithGitHub()` function.
 - **1.11.0** (2026-01-02): Added tag suggestions feature to detail modal. When viewing a screen's tags section, users can now tap a dropdown button next to the tag input to see all existing custom tags from their collection. The suggestions panel displays available tags (excluding ones already on the current screen) as clickable chips. Clicking a suggestion instantly adds that tag to the screen. Shows "No available tags" when all tags are already applied or no custom tags exist. Added toggle button with dropdown icon, suggestions panel with chips, click handlers for tag application, and CSS styling including hover effects and animations. This mirrors the book-tracker implementation and makes tag management much easier by avoiding retyping common tags.
 - **1.10.3** (2026-01-02): Implemented tolerant TSV parsing with automatic TMDB metadata fetching. TSV import now only requires `tmdbID` field - all other fields are optional. Missing fields are handled automatically: `addedAt` defaults to current timestamp, `finishedAt` and `lastWatchedEpisode` default to empty, and `tags`, `title`, `year`, `posterUrl`, and `overview` are fetched from TMDB API if not present. Added `fetchScreenMetadataFromTMDB()` function that queries TMDB API for missing metadata (tries movie endpoint first, then TV). Made `tsvToScreens()` async to support API calls during import. This enables simpler TSV files with just TMDB IDs, making manual TSV creation and bulk imports much easier.
 - **1.10.2** (2026-01-02): Added TSV field sanitization to prevent data corruption. TSV export now sanitizes string fields (title, posterUrl, description/overview) by removing newlines and replacing double quotes with single quotes. Added `sanitizeTSVField()` helper function that converts newlines to spaces and replaces `"` with `'` to ensure TSV integrity when syncing to GitHub Gist. Prevents issues with multi-line descriptions or titles containing special characters that could break the TSV format.
