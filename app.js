@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.11.0';
+const APP_VERSION = '1.12.0';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -1224,9 +1224,8 @@ function setupDetailModalListeners(screen) {
                 saveToLocalStorage();
                 renderScreens();
 
-                // Update UI
-                pillSegments.forEach(s => s.classList.remove('active'));
-                segment.classList.add('active');
+                // Refresh detail modal to show/hide rating section
+                showScreenDetail(existingScreen, 'list');
             }
         });
     });
@@ -1559,8 +1558,8 @@ function saveToLocalStorage() {
         localStorage.setItem('screenTracker_screens', JSON.stringify(state.screens));
         console.log('Saved to localStorage:', state.screens.length, 'screens');
 
-        // Automatically sync to GitHub Gist (silent push)
-        syncWithGitHub(false);
+        // Automatically sync to GitHub Gist (push-only, no pull/merge to avoid restoring deleted items)
+        syncWithGitHub(false, false);
     } catch (e) {
         console.error('Failed to save to localStorage:', e);
     }
@@ -1572,6 +1571,13 @@ function loadFromLocalStorage() {
         if (stored) {
             state.screens = JSON.parse(stored);
             console.log('Loaded from localStorage:', state.screens.length, 'screens');
+        }
+
+        // Load last sync time
+        const lastSync = localStorage.getItem('screenTracker_lastSyncTime');
+        if (lastSync) {
+            state.lastSyncTime = parseInt(lastSync);
+            console.log('Loaded lastSyncTime:', new Date(state.lastSyncTime).toISOString());
         }
     } catch (e) {
         console.error('Failed to load from localStorage:', e);
@@ -1682,39 +1688,53 @@ function getLatestTimestamp(screen) {
     return new Date(Math.max(...timestamps.map(t => new Date(t).getTime())));
 }
 
-// Merge local and remote screens (2-way sync)
+// Merge local and remote screens (TSV is single source of truth)
+// Remote screens are authoritative - if not in TSV, it was deleted
 function mergeScreens(localScreens, remoteScreens) {
     const merged = new Map();
+    const remoteIds = new Set();
 
-    // Add all local screens to map
-    localScreens.forEach(screen => {
+    // Step 1: Add all remote screens (TSV is source of truth)
+    remoteScreens.forEach(screen => {
         merged.set(screen.id, screen);
+        remoteIds.add(screen.id);
     });
 
-    // Merge with remote screens
-    remoteScreens.forEach(remoteScreen => {
-        const localScreen = merged.get(remoteScreen.id);
+    // Step 2: Process local screens
+    localScreens.forEach(localScreen => {
+        const remoteScreen = merged.get(localScreen.id);
 
-        if (!localScreen) {
-            // Screen only exists remotely - add it
-            merged.set(remoteScreen.id, remoteScreen);
-        } else {
+        if (remoteScreen) {
             // Screen exists in both - pick the one with most recent timestamp
             const localLatest = getLatestTimestamp(localScreen);
             const remoteLatest = getLatestTimestamp(remoteScreen);
 
-            if (remoteLatest && (!localLatest || remoteLatest > localLatest)) {
-                // Remote is newer - use it
-                merged.set(remoteScreen.id, remoteScreen);
+            if (localLatest && (!remoteLatest || localLatest > remoteLatest)) {
+                // Local is newer - use it
+                merged.set(localScreen.id, localScreen);
             }
-            // Otherwise keep local (already in map)
+            // Otherwise keep remote (already in map)
+        } else {
+            // Screen exists locally but NOT remotely
+            // Only keep if it's new (added after last sync) - otherwise it was deleted
+            const screenAddedAt = new Date(localScreen.addedAt).getTime();
+            const lastSync = state.lastSyncTime || 0;
+
+            // If screen was added after last sync, it's a new local addition
+            // If screen existed before last sync, it was deleted remotely - don't restore
+            if (screenAddedAt > lastSync) {
+                console.log('Keeping new local screen:', localScreen.title, 'added at', localScreen.addedAt);
+                merged.set(localScreen.id, localScreen);
+            } else {
+                console.log('Removing deleted screen:', localScreen.title, 'not in remote, added before last sync');
+            }
         }
     });
 
     return Array.from(merged.values());
 }
 
-async function syncWithGitHub(showFeedback = true) {
+async function syncWithGitHub(showFeedback = true, pullMerge = true) {
     if (!state.settings.apiToken) {
         if (showFeedback) {
             showSyncStatus('Please configure GitHub token first', 'error');
@@ -1734,9 +1754,10 @@ async function syncWithGitHub(showFeedback = true) {
 
     try {
         let remoteScreens = [];
+        let mergedScreens = state.screens;
 
-        // Step 1: Pull from GitHub Gist (if gist exists)
-        if (state.settings.gistId) {
+        // Step 1: Pull from GitHub Gist (only if pullMerge is true)
+        if (pullMerge && state.settings.gistId) {
             const fetchResponse = await fetch(`https://api.github.com/gists/${state.settings.gistId}`, {
                 headers: {
                     'Authorization': `token ${state.settings.apiToken}`,
@@ -1760,16 +1781,20 @@ async function syncWithGitHub(showFeedback = true) {
             }
         }
 
-        // Step 2: Merge local and remote screens
-        const mergedScreens = mergeScreens(state.screens, remoteScreens);
-        console.log('Merged:', mergedScreens.length, 'screens (local:', state.screens.length, ', remote:', remoteScreens.length, ')');
+        // Step 2: Merge local and remote screens (only if pullMerge is true)
+        if (pullMerge && remoteScreens.length > 0) {
+            mergedScreens = mergeScreens(state.screens, remoteScreens);
+            console.log('Merged:', mergedScreens.length, 'screens (local:', state.screens.length, ', remote:', remoteScreens.length, ')');
 
-        // Step 3: Update local state with merged data
-        state.screens = mergedScreens;
-        localStorage.setItem('screenTracker_screens', JSON.stringify(state.screens));
-        renderScreens();
+            // Step 3: Update local state with merged data
+            state.screens = mergedScreens;
+            localStorage.setItem('screenTracker_screens', JSON.stringify(state.screens));
+            renderScreens();
+        } else {
+            console.log('Push-only sync, using local state:', state.screens.length, 'screens');
+        }
 
-        // Step 4: Push merged data to GitHub Gist
+        // Step 4: Push data to GitHub Gist
         const tsvData = screensToTSV(mergedScreens);
 
         const gistData = {
@@ -1819,6 +1844,8 @@ async function syncWithGitHub(showFeedback = true) {
         }
 
         state.lastSyncTime = Date.now();
+        localStorage.setItem('screenTracker_lastSyncTime', state.lastSyncTime.toString());
+        console.log('Sync completed, lastSyncTime updated:', new Date(state.lastSyncTime).toISOString());
         if (showFeedback) showSyncStatus('Synced successfully', 'success');
     } catch (error) {
         console.error('Sync error:', error);
