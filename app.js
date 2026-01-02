@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.10.1';
+const APP_VERSION = '1.10.2';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -1773,6 +1773,14 @@ async function syncWithGitHub(showFeedback = true) {
     }
 }
 
+// Sanitize TSV field by removing newlines and replacing double quotes
+function sanitizeTSVField(value) {
+    if (!value) return '';
+    return String(value)
+        .replace(/[\r\n]+/g, ' ')  // Replace newlines with spaces
+        .replace(/"/g, "'");        // Replace double quotes with single quotes
+}
+
 // Convert screens to TSV format
 function screensToTSV(screens) {
     const header = 'addedAt\tfinishedAt\ttmdbID\tlastWatchedEpisode\ttags\ttitle\tyear\tposterURL\tdescription';
@@ -1788,10 +1796,10 @@ function screensToTSV(screens) {
             screen.tmdbId || '',
             screen.lastWatchedEpisode || '',
             allTags.join(','),
-            screen.title || '',
+            sanitizeTSVField(screen.title),
             screen.year || '',
-            screen.posterUrl || '',
-            screen.overview || ''
+            sanitizeTSVField(screen.posterUrl),
+            sanitizeTSVField(screen.overview)
         ].join('\t');
     });
 
