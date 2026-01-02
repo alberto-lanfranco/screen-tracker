@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.9.2';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -30,10 +30,70 @@ function setRatingTag(tags, rating) {
     return tagsWithoutRating;
 }
 
+// Helper functions for episode tracking
+function parseEpisodeCode(code) {
+    if (!code) return null;
+    const match = code.match(/^s(\d+)e(\d+)$/i);
+    if (!match) return null;
+    return {
+        season: parseInt(match[1]),
+        episode: parseInt(match[2])
+    };
+}
+
+function formatEpisodeCode(season, episode) {
+    return `s${season.toString().padStart(2, '0')}e${episode.toString().padStart(2, '0')}`;
+}
+
+function isEpisodeWatched(episodeSeason, episodeNumber, lastWatchedCode) {
+    if (!lastWatchedCode) return false;
+
+    const lastWatched = parseEpisodeCode(lastWatchedCode);
+    if (!lastWatched) return false;
+
+    // Episode is watched if it's before or equal to the last watched episode
+    if (episodeSeason < lastWatched.season) return true;
+    if (episodeSeason === lastWatched.season && episodeNumber <= lastWatched.episode) return true;
+
+    return false;
+}
+
+function updateLastWatchedEpisode(screenId, season, episode) {
+    const screen = state.screens.find(s => s.id === screenId);
+    if (screen) {
+        screen.lastWatchedEpisode = formatEpisodeCode(season, episode);
+        saveToLocalStorage();
+
+        // Update episode UI in-place without re-rendering (preserves fold state)
+        const episodesContainer = document.getElementById('episodesList');
+        if (!episodesContainer) return;
+
+        // Update all episode items to reflect new watched state
+        episodesContainer.querySelectorAll('.episode-item').forEach(episodeItem => {
+            const btn = episodeItem.querySelector('.episode-watch-btn');
+            if (!btn) return;
+
+            const epSeason = parseInt(btn.dataset.season);
+            const epNumber = parseInt(btn.dataset.episode);
+            const watched = isEpisodeWatched(epSeason, epNumber, screen.lastWatchedEpisode);
+
+            // Update episode item classes
+            if (watched) {
+                episodeItem.classList.add('watched');
+                btn.classList.add('watched');
+            } else {
+                episodeItem.classList.remove('watched');
+                btn.classList.remove('watched');
+            }
+        });
+    }
+}
+
 // Helper functions for determining screen list status from timestamps
 function getScreenListStatus(screen) {
     if (screen.finishedAt) return 'watched';
-    if (screen.startedAt) return 'watching';
+    // Watching status is only for TV shows with episode tracking
+    if (screen.type === 'tv' && screen.lastWatchedEpisode) return 'watching';
     if (screen.addedAt) return 'to_watch';
     return null;
 }
@@ -70,27 +130,25 @@ function setListTimestamps(screen, listStatus) {
 
     if (listStatus === 'to_watch') {
         screen.addedAt = now;
-        screen.startedAt = null;
         screen.finishedAt = null;
+        // Clear episode tracking when moving back to "to watch"
+        screen.lastWatchedEpisode = null;
     } else if (listStatus === 'watching') {
-        screen.startedAt = now;
+        // Watching is determined by having lastWatchedEpisode set
+        // This case is for when pill selector is clicked, but actual
+        // episode tracking is done via episode checkmark buttons
         screen.finishedAt = null;
 
-        // Integrity check: ensure addedAt is present and before startedAt
-        if (!screen.addedAt || screen.addedAt > screen.startedAt) {
-            screen.addedAt = screen.startedAt;
+        // Ensure addedAt is set
+        if (!screen.addedAt) {
+            screen.addedAt = now;
         }
     } else if (listStatus === 'watched') {
         screen.finishedAt = now;
 
-        // Integrity check: ensure startedAt is present and before finishedAt
-        if (!screen.startedAt || screen.startedAt > screen.finishedAt) {
-            screen.startedAt = screen.finishedAt;
-        }
-
-        // Integrity check: ensure addedAt is present and before startedAt
-        if (!screen.addedAt || screen.addedAt > screen.startedAt) {
-            screen.addedAt = screen.startedAt;
+        // Ensure addedAt is present
+        if (!screen.addedAt) {
+            screen.addedAt = screen.finishedAt;
         }
     }
 
@@ -723,6 +781,55 @@ function displaySearchResults(results) {
     searchResults.appendChild(manualEntryButton);
 }
 
+// Fetch TV show episodes from TMDB API
+async function fetchTVEpisodes(tmdbId) {
+    const apiKey = getTmdbApiKey();
+    if (!apiKey || !tmdbId) return null;
+
+    try {
+        // First, get the TV show details to find out how many seasons there are
+        const tvResponse = await fetch(`${TMDB_BASE_URL}/tv/${tmdbId}?api_key=${apiKey}`);
+        if (!tvResponse.ok) return null;
+
+        const tvData = await tvResponse.json();
+        const seasons = tvData.seasons || [];
+
+        // Filter out "Season 0" (specials) and get season numbers
+        const seasonNumbers = seasons
+            .filter(s => s.season_number > 0)
+            .map(s => s.season_number)
+            .slice(0, 20); // TMDB allows max 20 append_to_response calls
+
+        if (seasonNumbers.length === 0) return null;
+
+        // Build append_to_response parameter for all seasons
+        const appendSeasons = seasonNumbers.map(num => `season/${num}`).join(',');
+
+        // Fetch all seasons in one call
+        const detailsResponse = await fetch(
+            `${TMDB_BASE_URL}/tv/${tmdbId}?api_key=${apiKey}&append_to_response=${appendSeasons}`
+        );
+
+        if (!detailsResponse.ok) return null;
+
+        const detailsData = await detailsResponse.json();
+
+        // Extract season data
+        const seasonsData = [];
+        seasonNumbers.forEach(num => {
+            const seasonKey = `season/${num}`;
+            if (detailsData[seasonKey]) {
+                seasonsData.push(detailsData[seasonKey]);
+            }
+        });
+
+        return seasonsData;
+    } catch (error) {
+        console.error('Failed to fetch TV episodes:', error);
+        return null;
+    }
+}
+
 // Show screen detail modal
 function showScreenDetail(screen, source = 'list', editMode = false) {
     currentDetailScreen = screen;
@@ -870,12 +977,14 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
                         </svg>
                         <span>To Watch</span>
                     </button>
+                    ${displayScreen.type === 'tv' ? `
                     <button class="pill-segment ${listStatus === 'watching' ? 'active' : ''}" data-status="watching">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polygon points="5 3 19 12 5 21 5 3"></polygon>
                         </svg>
                         <span>Watching</span>
                     </button>
+                    ` : ''}
                     <button class="pill-segment ${listStatus === 'watched' ? 'active' : ''}" data-status="watched">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="20 6 9 17 4 12"></polyline>
@@ -927,6 +1036,12 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
         ${ratingSection}
 
         ${screen.overview ? `<div class="detail-description">${screen.overview}</div>` : ''}
+
+        ${displayScreen.type === 'tv' && displayScreen.tmdbId ? `
+            <div id="episodesList" class="episodes-section">
+                <div class="episodes-loading">Loading episodes...</div>
+            </div>
+        ` : ''}
     `;
     }
 
@@ -934,6 +1049,100 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
     setupDetailModalListeners(existingScreen || screen);
 
     modal.classList.add('active');
+
+    // Fetch and display episodes for TV shows
+    if (displayScreen.type === 'tv' && displayScreen.tmdbId && !editMode) {
+        fetchAndDisplayEpisodes(displayScreen.tmdbId, displayScreen.id);
+    }
+}
+
+// Fetch and display episodes for a TV show
+async function fetchAndDisplayEpisodes(tmdbId, screenId) {
+    const episodesContainer = document.getElementById('episodesList');
+    if (!episodesContainer) return;
+
+    const seasonsData = await fetchTVEpisodes(tmdbId);
+
+    if (!seasonsData || seasonsData.length === 0) {
+        episodesContainer.innerHTML = '<div class="episodes-empty">No episode data available</div>';
+        return;
+    }
+
+    // Get the screen to access lastWatchedEpisode
+    const screen = state.screens.find(s => s.id === screenId);
+    const lastWatchedEpisode = screen ? screen.lastWatchedEpisode : null;
+
+    // Build episodes HTML grouped by season
+    let episodesHTML = '<div class="episodes-header">Episodes</div>';
+
+    seasonsData.forEach(season => {
+        const episodes = season.episodes || [];
+        if (episodes.length === 0) return;
+
+        episodesHTML += `
+            <div class="season-group">
+                <button class="season-header expanded" data-season="${season.season_number}">
+                    <span class="season-title">Season ${season.season_number}</span>
+                    <span class="season-count">${episodes.length} episode${episodes.length !== 1 ? 's' : ''}</span>
+                    <svg class="season-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </button>
+                <div class="episodes-list" data-season="${season.season_number}" style="display: block;">
+                    ${episodes.map(ep => {
+                        const watched = isEpisodeWatched(season.season_number, ep.episode_number, lastWatchedEpisode);
+                        return `
+                        <div class="episode-item ${watched ? 'watched' : ''}">
+                            <div class="episode-number">${ep.episode_number}</div>
+                            <div class="episode-info">
+                                <div class="episode-title">${ep.name || 'Untitled'}</div>
+                                <div class="episode-meta">${ep.air_date || 'No date'}</div>
+                                ${ep.overview ? `<div class="episode-overview">${ep.overview}</div>` : ''}
+                            </div>
+                            <button class="episode-watch-btn ${watched ? 'watched' : ''}"
+                                    data-screen-id="${screenId}"
+                                    data-season="${season.season_number}"
+                                    data-episode="${ep.episode_number}"
+                                    title="Mark as last watched">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                            </button>
+                        </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    });
+
+    episodesContainer.innerHTML = episodesHTML;
+
+    // Add click handlers for season headers (accordion)
+    episodesContainer.querySelectorAll('.season-header').forEach(header => {
+        header.addEventListener('click', () => {
+            const seasonNum = header.dataset.season;
+            const episodesList = episodesContainer.querySelector(`.episodes-list[data-season="${seasonNum}"]`);
+            const chevron = header.querySelector('.season-chevron');
+
+            if (episodesList) {
+                const isVisible = episodesList.style.display !== 'none';
+                episodesList.style.display = isVisible ? 'none' : 'block';
+                header.classList.toggle('expanded', !isVisible);
+            }
+        });
+    });
+
+    // Add click handlers for episode watch buttons
+    episodesContainer.querySelectorAll('.episode-watch-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const screenId = btn.dataset.screenId;
+            const season = parseInt(btn.dataset.season);
+            const episode = parseInt(btn.dataset.episode);
+            updateLastWatchedEpisode(screenId, season, episode);
+        });
+    });
 }
 
 // Setup event listeners for detail modal
@@ -1546,15 +1755,15 @@ async function syncWithGitHub(showFeedback = true) {
 
 // Convert screens to TSV format
 function screensToTSV(screens) {
-    const header = 'addedAt\tstartedAt\tfinishedAt\ttmdbID\ttags\ttype\ttitle\tyear\tposterURL\tdescription';
+    const header = 'addedAt\tfinishedAt\ttmdbID\tlastWatchedEpisode\ttags\ttype\ttitle\tyear\tposterURL\tdescription';
     const rows = screens.map(screen => {
         // Map 'tv' to 'show' for TSV export
         const tsvType = screen.type === 'tv' ? 'show' : screen.type;
         return [
             screen.addedAt || '',
-            screen.startedAt || '',
             screen.finishedAt || '',
             screen.tmdbId || '',
+            screen.lastWatchedEpisode || '',
             (screen.tags || []).join(','),
             tsvType || '',
             screen.title || '',
@@ -1585,9 +1794,9 @@ function tsvToScreens(tsv) {
 
         const screen = {
             addedAt: parts[0],
-            startedAt: parts[1],
-            finishedAt: parts[2],
-            tmdbId: parts[3],
+            finishedAt: parts[1],
+            tmdbId: parts[2],
+            lastWatchedEpisode: parts[3] || null,
             tags: parts[4] ? parts[4].split(',').filter(t => t) : [],
             type: internalType,
             title: parts[6],

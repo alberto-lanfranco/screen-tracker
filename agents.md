@@ -52,29 +52,27 @@ state = {
 #### 3. Screen Object Structure
 ```javascript
 {
-    id: string,           // Format: "movie_12345" or "tv_67890" or "manual_timestamp"
-    tmdbId: number,       // The Movie Database ID
-    type: string,         // "movie" or "tv"
+    id: string,                 // Format: "movie_12345" or "tv_67890" or "manual_timestamp"
+    tmdbId: number,             // The Movie Database ID
+    type: string,               // "movie" or "tv"
     title: string,
-    year: string,         // YYYY format
-    posterUrl: string,    // TMDB poster URL (original source)
-    cachedPoster: string, // Base64 data URI of cached poster image for offline use
-    overview: string,     // Plot description
-    tags: string[],       // User-defined tags and rating (01_stars to 10_stars)
-    addedAt: string,      // ISO 8601 timestamp of when screen was added to To Watch list
-    startedAt: string,    // ISO 8601 timestamp of when screen was moved to Watching list (null if not started)
-    finishedAt: string    // ISO 8601 timestamp of when screen was moved to Watched list (null if not finished)
+    year: string,               // YYYY format
+    posterUrl: string,          // TMDB poster URL (original source)
+    cachedPoster: string,       // Base64 data URI of cached poster image for offline use
+    overview: string,           // Plot description
+    tags: string[],             // User-defined tags and rating (01_stars to 10_stars)
+    addedAt: string,            // ISO 8601 timestamp of when screen was added to collection
+    finishedAt: string,         // ISO 8601 timestamp of when screen was marked as watched (null if not finished)
+    lastWatchedEpisode: string  // Last watched episode for TV shows, format: "s02e06" (null for movies or unwatched shows)
 }
 ```
 
-**List Status Determination**: Screens are organized into lists based on timestamps:
-- **To Watch**: `addedAt` is set, `startedAt` and `finishedAt` are null
-- **Watching**: `startedAt` is set, `finishedAt` is null
+**List Status Determination**: Screens are organized into lists based on properties:
+- **To Watch**: `addedAt` is set, no `lastWatchedEpisode` and no `finishedAt`
+- **Watching** (TV shows only): `lastWatchedEpisode` is set, `finishedAt` is null
 - **Watched**: `finishedAt` is set
 
-**Timestamp Integrity**: When setting timestamps, the system enforces:
-- `addedAt` ≤ `startedAt` ≤ `finishedAt`
-- If integrity check fails, earlier timestamps are copied from later ones
+**Important**: Movies do not have a "Watching" status - only "To Watch" and "Watched"
 
 ## API Integration
 
@@ -138,6 +136,25 @@ GET https://api.themoviedb.org/3/search/tv?api_key={key}&query={query}&page=1
 - **Search results**: w300 (300px width)
 - **Detail view**: w500 (500px width) - could be upgraded
 - **Thumbnails**: w185 (185px width) - not currently used
+
+#### TV Show Episodes Endpoints
+
+**Get TV Series Details**
+```
+GET https://api.themoviedb.org/3/tv/{series_id}?api_key={key}
+```
+Returns TV series information including seasons array.
+
+**Get All Episodes (with append_to_response)**
+```
+GET https://api.themoviedb.org/3/tv/{series_id}?api_key={key}&append_to_response=season/1,season/2,...
+```
+Fetches TV series with multiple seasons in one API call. Maximum 20 seasons can be appended.
+
+**Response Structure**:
+- Each season object contains `episodes` array
+- Episode object: `episode_number`, `name`, `air_date`, `overview`, `still_path`
+- Season 0 (specials) is filtered out in implementation
 
 ### GitHub Gist API
 
@@ -248,6 +265,19 @@ Body: {
   - Poster image on left
   - Metadata on right (title, type, year, TMDB ID)
 - Complete overview/description
+- **Episode List** (TV shows only):
+  - Fetched on-demand from TMDB API when modal opens
+  - Grouped by season in collapsible accordion format
+  - Each episode displays: episode number, title, air date, overview
+  - Season 0 (specials) excluded
+  - Uses `append_to_response` to fetch up to 20 seasons efficiently
+  - Not stored permanently (fetched fresh each time)
+  - **Episode Tracking**:
+    - Each episode has a checkmark button to mark as last watched
+    - All episodes up to and including last watched are visually marked
+    - Click checkmark button to update last watched episode
+    - Watched episodes have reduced opacity and grayed-out styling
+    - Last watched episode stored in format 's02e06' and synced to cloud
 - **Tags management** - shown for screens in lists:
   - Add tags by typing and pressing Enter
   - Remove tags by clicking × button
@@ -274,20 +304,20 @@ Body: {
 
 #### TSV Structure
 ```tsv
-addedAt	startedAt	finishedAt	tmdbID	tags	type	title	year	posterURL	description
-2025-01-01T10:00:00.000Z			603	scifi,action,09_stars	movie	The Matrix	1999	https://...	A computer hacker...
-2025-01-01T11:00:00.000Z	2025-01-01T12:00:00.000Z		27205	scifi,thriller	movie	Inception	2010	https://...	A thief who steals...
-2025-01-01T09:00:00.000Z	2025-01-01T10:00:00.000Z	2025-01-01T20:00:00.000Z	1396	10_stars,drama	show	Breaking Bad	2008	https://...	A high school chemistry...
+addedAt	finishedAt	tmdbID	lastWatchedEpisode	tags	type	title	year	posterURL	description
+2025-01-01T10:00:00.000Z		603		scifi,action,09_stars	movie	The Matrix	1999	https://...	A computer hacker...
+2025-01-01T11:00:00.000Z		27205		scifi,thriller	movie	Inception	2010	https://...	A thief who steals...
+2025-01-01T09:00:00.000Z	2025-01-01T20:00:00.000Z	1396	s05e16	10_stars,drama	show	Breaking Bad	2008	https://...	A high school chemistry...
 ```
 
-- **Columns**: addedAt, startedAt, finishedAt, tmdbID, tags, type, title, year, posterURL, description
+- **Columns**: addedAt, finishedAt, tmdbID, lastWatchedEpisode, tags, type, title, year, posterURL, description
 - **Delimiter**: Tab character (\t)
 - **Encoding**: UTF-8
 - **Data Model**: Denormalized - TSV stores complete metadata
-  - **addedAt**: ISO 8601 timestamp (required)
-  - **startedAt**: ISO 8601 timestamp (empty for To Watch)
+  - **addedAt**: ISO 8601 timestamp (required, when screen was added to collection)
   - **finishedAt**: ISO 8601 timestamp (empty for To Watch and Watching)
   - **tmdbID**: The Movie Database ID (for re-fetching if needed)
+  - **lastWatchedEpisode**: Last watched episode for TV shows, format "s02e06" (empty for movies or unwatched shows)
   - **tags**: Comma-separated (includes rating tags like "09_stars")
   - **type**: "movie" or "show" (internally stored as "tv" for TV shows)
   - **title**: Screen title
@@ -574,7 +604,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **Version Format**: MAJOR.MINOR.PATCH (e.g., 1.0.0)
 - **Location**: `APP_VERSION` constant in `app.js` and `CACHE_VERSION` in `sw.js`
 - **Display**: Shown in Settings tab under "About" section
-- **Current Version**: 1.6.0
+- **Current Version**: 1.9.2
 - **When to Update**:
   - **MAJOR**: Breaking changes, major redesigns, incompatible data format changes
   - **MINOR**: New features, significant additions (e.g., episode tracking, new views)
@@ -609,6 +639,11 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
    - Mention any breaking changes or migrations
 
 ### Version History
+- **1.9.2** (2026-01-02): Fixed bug where marking an episode as watched would reset season fold states. Previously, `updateLastWatchedEpisode()` re-rendered the entire episode list, causing all seasons to return to their default (expanded) state. Now uses in-place DOM updates to modify episode watched states without re-rendering, preserving the user's chosen fold/unfold state for each season during the modal session. Changed from calling `fetchAndDisplayEpisodes()` to directly updating CSS classes on existing episode items.
+- **1.9.1** (2026-01-02): Changed episode list default state to expanded. All seasons now display as unfolded by default when viewing TV show details, making episodes immediately visible. Added `expanded` class to season headers and set initial display to `block` instead of `none`.
+- **1.9.0** (2026-01-02): Simplified state management by removing `startedAt` timestamp. "Watching" status is now exclusively for TV shows with episode tracking (`lastWatchedEpisode` set). Movies only have "To Watch" and "Watched" states. Updated `getScreenListStatus()` to check `type === 'tv' && lastWatchedEpisode` for watching status. Updated `setListTimestamps()` to remove startedAt handling. Removed `startedAt` column from TSV sync format (now: addedAt, finishedAt, tmdbID, lastWatchedEpisode, tags, type, title, year, posterURL, description). Hidden "Watching" pill segment for movies in detail modal. Updated screen object structure documentation. **Breaking change**: TSV format updated - existing gists need re-sync.
+- **1.8.0** (2026-01-02): Added episode tracking for TV shows. Users can now mark episodes as watched by clicking a checkmark button next to each episode. The app tracks the last watched episode in format 's02e06' and visually marks all episodes up to and including the last watched episode with a checkmark. Added `lastWatchedEpisode` field to screen data structure and TSV sync format (new column after tmdbID). Added helper functions: `parseEpisodeCode()`, `formatEpisodeCode()`, `isEpisodeWatched()`, and `updateLastWatchedEpisode()`. Updated `fetchAndDisplayEpisodes()` to render watch buttons and handle watch state. Added comprehensive CSS styling for watched episodes and watch buttons. **Breaking change**: TSV format updated - existing gists will need to be re-synced.
+- **1.7.0** (2026-01-02): Added full episode list display for TV shows in detail modal. When viewing a TV show, the detail modal now fetches and displays all episodes grouped by season in collapsible accordions. Each episode shows episode number, title, air date, and overview. Episodes are fetched on-demand from TMDB API using the `append_to_response` parameter to efficiently retrieve multiple seasons in a single API call (up to 20 seasons). Season 0 (specials) is excluded. Added new functions: `fetchTVEpisodes()` and `fetchAndDisplayEpisodes()`. Added comprehensive CSS styling for episodes section including season headers, episode items, and responsive design.
 - **1.6.0** (2026-01-02): Implemented proper 2-way sync for GitHub Gist. Previously, sync only pushed local data to Gist, causing data loss when using multiple devices (they would overwrite each other). Now implements pull-merge-push cycle: (1) pulls current Gist content, (2) merges with local data using timestamp-based conflict resolution, (3) updates local state with merged data, (4) pushes merged result to Gist. Merge strategy uses screen ID as unique key and picks the version with the most recent timestamp when conflicts occur. This ensures data converges across devices. Added `getLatestTimestamp()` and `mergeScreens()` helper functions.
 - **1.5.5** (2026-01-02): Changed TSV type field from 'tv' to 'show' for better readability. Updated `screensToTSV()` to export TV shows as 'show' and `tsvToScreens()` to convert 'show' back to 'tv' for internal representation. Internal code continues to use 'tv' (matching TMDB API), but TSV files now use the more readable 'show' label.
 - **1.5.4** (2026-01-02): Fixed automatic GitHub Gist sync. The `saveToLocalStorage()` function was not calling `syncWithGitHub()` as documented, so screen changes weren't automatically syncing to the cloud. Added automatic silent sync call after each local save to ensure data is pushed to GitHub Gist after every screen operation (add/move/delete/rate/tag).
