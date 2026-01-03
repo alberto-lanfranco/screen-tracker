@@ -1092,7 +1092,7 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
             <div class="detail-metadata">
                 <div class="detail-title">${screen.title}</div>
                 <div class="detail-meta">${typeLabel}${screen.year ? ` • ${screen.year}` : ''}</div>
-                ${displayScreen.type === 'movie' && displayScreen.director ? `<div class="detail-director">Directed by ${displayScreen.director}</div>` : ''}
+                ${displayScreen.type === 'movie' && displayScreen.director ? `<div class="detail-director">${displayScreen.director}</div>` : ''}
                 ${screen.tmdbId ? `<div class="detail-tmdb-id">TMDB ID: ${screen.tmdbId}</div>` : ''}
             </div>
         </div>
@@ -1622,7 +1622,7 @@ function renderScreens() {
                     <div class="screen-card-header">
                         <div class="screen-title">${screen.title}</div>
                         <div class="screen-meta">${typeLabel}${screen.year ? ` • ${screen.year}` : ''}</div>
-                        ${screen.type === 'movie' && screen.director ? `<div class="screen-director">Directed by ${screen.director}</div>` : ''}
+                        ${screen.type === 'movie' && screen.director ? `<div class="screen-director">${screen.director}</div>` : ''}
                         ${listStatus ? `<div class="screen-status">${statusLabels[listStatus]}</div>` : ''}
                         ${listStatus === 'watching' && screen.waitingForNewEpisodes ? `<div class="screen-waiting">⏳ waiting for new episodes</div>` : ''}
                         ${rating ? `<div class="screen-rating">⭐ ${rating}/10</div>` : ''}
