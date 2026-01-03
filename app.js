@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.14.0';
+const APP_VERSION = '1.14.1';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -122,6 +122,13 @@ function updateLastWatchedEpisode(screenId, season, episode) {
 
         // Re-render the screens list so the waiting message appears immediately
         renderScreens();
+
+        // Refresh detail modal if it's currently showing this screen
+        // This updates the pill selector to show the new status (e.g., "watching" instead of "to watch")
+        const modal = document.getElementById('screenDetailModal');
+        if (modal && modal.classList.contains('active') && currentDetailScreen && currentDetailScreen.id === screenId) {
+            showScreenDetail(screen, currentDetailSource, false);
+        }
     }
 }
 
@@ -1351,6 +1358,12 @@ function setupDetailModalListeners(screen) {
             const status = segment.dataset.status;
 
             if (existingScreen) {
+                // Special handling for "watching" status on TV shows:
+                // If no episodes are watched yet, automatically mark the first episode as watched
+                if (status === 'watching' && existingScreen.type === 'tv' && !existingScreen.lastWatchedEpisode) {
+                    existingScreen.lastWatchedEpisode = 's01e01';
+                }
+
                 setListTimestamps(existingScreen, status);
                 saveToLocalStorage();
                 renderScreens();
