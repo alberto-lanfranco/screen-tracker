@@ -56,6 +56,7 @@ state = {
     tmdbId: number,             // The Movie Database ID
     type: string,               // "movie" or "tv" (internal only, not in TSV)
     title: string,
+    director: string,           // Director name (movies only, null for TV shows)
     year: string,               // YYYY format
     posterUrl: string,          // TMDB poster URL (original source)
     cachedPoster: string,       // Base64 data URI of cached poster image for offline use
@@ -317,13 +318,13 @@ Body: {
 
 #### TSV Structure
 ```tsv
-addedAt	finishedAt	tmdbID	lastWatchedEpisode	tags	title	year	posterURL	description
-2025-01-01T10:00:00.000Z		603		movie,scifi,action,09_stars	The Matrix	1999	https://...	A computer hacker...
-2025-01-01T11:00:00.000Z		27205		movie,scifi,thriller	Inception	2010	https://...	A thief who steals...
-2025-01-01T09:00:00.000Z	2025-01-01T20:00:00.000Z	1396	s05e16	show,10_stars,drama	Breaking Bad	2008	https://...	A high school chemistry...
+addedAt	finishedAt	tmdbID	lastWatchedEpisode	tags	title	director	year	posterURL	description
+2025-01-01T10:00:00.000Z		603		movie,scifi,action,09_stars	The Matrix	Lana Wachowski, Lilly Wachowski	1999	https://...	A computer hacker...
+2025-01-01T11:00:00.000Z		27205		movie,scifi,thriller	Inception	Christopher Nolan	2010	https://...	A thief who steals...
+2025-01-01T09:00:00.000Z	2025-01-01T20:00:00.000Z	1396	s05e16	show,10_stars,drama	Breaking Bad		2008	https://...	A high school chemistry...
 ```
 
-- **Columns**: addedAt, finishedAt, tmdbID, lastWatchedEpisode, tags, title, year, posterURL, description
+- **Columns**: addedAt, finishedAt, tmdbID, lastWatchedEpisode, tags, title, director, year, posterURL, description
 - **Delimiter**: Tab character (\t)
 - **Encoding**: UTF-8
 - **Required Field**: Only `tmdbID` is required - all other fields are optional
@@ -334,6 +335,7 @@ addedAt	finishedAt	tmdbID	lastWatchedEpisode	tags	title	year	posterURL	descripti
   - **lastWatchedEpisode**: Last watched episode for TV shows, format "s02e06" (defaults to empty if missing)
   - **tags**: Comma-separated; should start with "movie" or "show" as first tag (type indicator), followed by rating tags like "09_stars" and user-defined tags (if type tag missing, fetched from TMDB API)
   - **title**: Screen title (fetched from TMDB API if missing)
+  - **director**: Movie director name (fetched from TMDB API if missing for movies, empty for TV shows)
   - **year**: Release/first air year YYYY (fetched from TMDB API if missing)
   - **posterURL**: Original TMDB poster URL (fetched from TMDB API if missing)
   - **description**: Plot description (fetched from TMDB API if missing)
@@ -620,7 +622,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
 - **Version Format**: MAJOR.MINOR.PATCH (e.g., 1.0.0)
 - **Location**: `APP_VERSION` constant in `app.js` and `CACHE_VERSION` in `sw.js`
 - **Display**: Shown in Settings tab under "About" section
-- **Current Version**: 1.13.3
+- **Current Version**: 1.14.0
 - **When to Update**:
   - **MAJOR**: Breaking changes, major redesigns, incompatible data format changes
   - **MINOR**: New features, significant additions (e.g., episode tracking, new views)
@@ -655,6 +657,7 @@ All icons: 18x18px in cards, 24x24px in navigation, stroke-width 2
    - Mention any breaking changes or migrations
 
 ### Version History
+- **1.14.0** (2026-01-03): Added director field for movies. Movies now display the director name in both the list view and detail modal. Director information is fetched automatically from TMDB API for movies (TV shows do not have a director field). Added "director" column to TSV format between "title" and "year". TSV import now automatically detects old format (9 columns without director) and migrates data, fetching missing director information from TMDB API for movies. The migration is transparent and happens automatically during sync. Migration code is marked for removal in next major release (2.0.0). **Breaking change**: TSV format updated from 9 to 10 columns - existing gists will be automatically migrated on first sync.
 - **1.13.3** (2026-01-02): Implemented automatic recalculation of waiting status across devices. After a pull-merge sync completes, the app now automatically fetches episode data from TMDB for all watching TV shows and recalculates their `waitingForNewEpisodes` status. This ensures that when you mark the last episode as watched on Device A and sync, Device B will automatically show the "⏳ waiting for new episodes" indicator without needing to open each show's detail modal. Added `recalculateWaitingStatusForAll()` function that processes shows sequentially to avoid overwhelming the TMDB API. The recalculation runs asynchronously in the background after sync completes, without blocking the UI.
 - **1.13.2** (2026-01-02): Fixed bug where "waiting for new episodes" indicator would disappear after syncing with GitHub Gist. The `waitingForNewEpisodes` and `cachedPoster` properties are local-only (not stored in TSV), so they were being lost during the merge process when remote screens were selected. Modified `mergeScreens()` function to preserve these local-only properties from the local screen even when the remote version is selected as the source of truth. This ensures the waiting indicator and cached poster images persist across sync operations.
 - **1.13.1** (2026-01-02): Fixed bug where "waiting for new episodes" indicator wouldn't appear immediately after marking an episode as watched. Added `renderScreens()` call to `updateLastWatchedEpisode()` so the list view updates in the background while the detail modal is still open. The waiting message now appears immediately without needing to switch tabs.

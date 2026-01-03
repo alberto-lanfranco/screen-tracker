@@ -760,6 +760,12 @@ body.keyboard-open .bottom-nav {
     margin-top: 4px;
 }
 
+.screen-director {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
 .detail-rating {
     margin: 16px 0;
     padding: 16px;
@@ -1656,6 +1662,18 @@ body.keyboard-open .bottom-nav {
     font-size: 13px;
     color: var(--text-tertiary);
     margin-bottom: 8px;
+}
+
+.detail-director {
+    font-size: 15px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.detail-tmdb-id {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    margin-bottom: 4px;
 }
 
 /* Adjust rating and tags in metadata */

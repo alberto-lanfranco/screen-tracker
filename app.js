@@ -1,5 +1,5 @@
 // App version (semantic versioning)
-const APP_VERSION = '1.13.3';
+const APP_VERSION = '1.14.0';
 console.log('Screen Tracker app.js loaded, version:', APP_VERSION);
 
 // TMDB API configuration
@@ -1028,6 +1028,7 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
                     <option value="movie" ${displayScreen.type === 'movie' ? 'selected' : ''}>Movie</option>
                     <option value="tv" ${displayScreen.type === 'tv' ? 'selected' : ''}>TV Show</option>
                 </select>
+                ${displayScreen.type === 'movie' ? `<input type="text" class="edit-input" id="editDirector" value="${displayScreen.director || ''}" placeholder="Director (optional)">` : ''}
                 <input type="text" class="edit-input" id="editYear" value="${displayScreen.year || ''}" placeholder="Year" style="width: 100px;">
                 <label>Overview:</label>
                 <textarea class="edit-textarea" id="editOverview" placeholder="Overview">${displayScreen.overview || ''}</textarea>
@@ -1046,9 +1047,11 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
 
         if (saveBtn) {
             saveBtn.addEventListener('click', async () => {
+                const editDirectorInput = document.getElementById('editDirector');
                 const updates = {
                     title: document.getElementById('editTitle').value.trim() || displayScreen.title,
                     type: document.getElementById('editType').value,
+                    director: editDirectorInput ? editDirectorInput.value.trim() : displayScreen.director,
                     year: document.getElementById('editYear').value.trim() || displayScreen.year,
                     posterUrl: document.getElementById('editPosterUrl').value.trim() || displayScreen.posterUrl,
                     overview: document.getElementById('editOverview').value.trim() || displayScreen.overview
@@ -1089,6 +1092,7 @@ function showScreenDetail(screen, source = 'list', editMode = false) {
             <div class="detail-metadata">
                 <div class="detail-title">${screen.title}</div>
                 <div class="detail-meta">${typeLabel}${screen.year ? ` • ${screen.year}` : ''}</div>
+                ${displayScreen.type === 'movie' && displayScreen.director ? `<div class="detail-director">Directed by ${displayScreen.director}</div>` : ''}
                 ${screen.tmdbId ? `<div class="detail-tmdb-id">TMDB ID: ${screen.tmdbId}</div>` : ''}
             </div>
         </div>
@@ -1618,6 +1622,7 @@ function renderScreens() {
                     <div class="screen-card-header">
                         <div class="screen-title">${screen.title}</div>
                         <div class="screen-meta">${typeLabel}${screen.year ? ` • ${screen.year}` : ''}</div>
+                        ${screen.type === 'movie' && screen.director ? `<div class="screen-director">Directed by ${screen.director}</div>` : ''}
                         ${listStatus ? `<div class="screen-status">${statusLabels[listStatus]}</div>` : ''}
                         ${listStatus === 'watching' && screen.waitingForNewEpisodes ? `<div class="screen-waiting">⏳ waiting for new episodes</div>` : ''}
                         ${rating ? `<div class="screen-rating">⭐ ${rating}/10</div>` : ''}
@@ -2019,7 +2024,7 @@ function sanitizeTSVField(value) {
 
 // Convert screens to TSV format
 function screensToTSV(screens) {
-    const header = 'addedAt\tfinishedAt\ttmdbID\tlastWatchedEpisode\ttags\ttitle\tyear\tposterURL\tdescription';
+    const header = 'addedAt\tfinishedAt\ttmdbID\tlastWatchedEpisode\ttags\ttitle\tdirector\tyear\tposterURL\tdescription';
     const rows = screens.map(screen => {
         // Ensure movie/show tag is first in tags array
         const typeTag = screen.type === 'tv' ? 'show' : 'movie';
@@ -2033,6 +2038,7 @@ function screensToTSV(screens) {
             screen.lastWatchedEpisode || '',
             allTags.join(','),
             sanitizeTSVField(screen.title),
+            sanitizeTSVField(screen.director),
             screen.year || '',
             sanitizeTSVField(screen.posterUrl),
             sanitizeTSVField(screen.overview)
@@ -2040,6 +2046,32 @@ function screensToTSV(screens) {
     });
 
     return header + '\n' + rows.join('\n');
+}
+
+// Fetch movie director from TMDB API
+async function fetchMovieDirector(tmdbId) {
+    const apiKey = getTmdbApiKey();
+    if (!apiKey || !tmdbId) return null;
+
+    try {
+        const response = await fetch(`${TMDB_BASE_URL}/movie/${tmdbId}?api_key=${apiKey}&append_to_response=credits`);
+        if (!response.ok) return null;
+
+        const data = await response.json();
+
+        // Find the director in the crew
+        if (data.credits && data.credits.crew) {
+            const director = data.credits.crew.find(person => person.job === 'Director');
+            if (director) {
+                return director.name;
+            }
+        }
+
+        return null;
+    } catch (error) {
+        console.error('Error fetching director from TMDB:', error);
+        return null;
+    }
 }
 
 // Fetch screen metadata from TMDB API
@@ -2051,12 +2083,23 @@ async function fetchScreenMetadataFromTMDB(tmdbId, type = null) {
         // If type is not specified, try to detect it by attempting both endpoints
         if (!type) {
             // Try movie first
-            const movieResponse = await fetch(`${TMDB_BASE_URL}/movie/${tmdbId}?api_key=${apiKey}`);
+            const movieResponse = await fetch(`${TMDB_BASE_URL}/movie/${tmdbId}?api_key=${apiKey}&append_to_response=credits`);
             if (movieResponse.ok) {
                 const movieData = await movieResponse.json();
+
+                // Extract director from credits
+                let director = null;
+                if (movieData.credits && movieData.credits.crew) {
+                    const directorObj = movieData.credits.crew.find(person => person.job === 'Director');
+                    if (directorObj) {
+                        director = directorObj.name;
+                    }
+                }
+
                 return {
                     type: 'movie',
                     title: movieData.title,
+                    director: director,
                     year: movieData.release_date ? movieData.release_date.substring(0, 4) : '',
                     posterUrl: movieData.poster_path ? `${TMDB_IMAGE_BASE}/w300${movieData.poster_path}` : '',
                     overview: movieData.overview || ''
@@ -2070,6 +2113,7 @@ async function fetchScreenMetadataFromTMDB(tmdbId, type = null) {
                 return {
                     type: 'tv',
                     title: tvData.name,
+                    director: null, // TV shows don't have a single director
                     year: tvData.first_air_date ? tvData.first_air_date.substring(0, 4) : '',
                     posterUrl: tvData.poster_path ? `${TMDB_IMAGE_BASE}/w300${tvData.poster_path}` : '',
                     overview: tvData.overview || ''
@@ -2080,22 +2124,45 @@ async function fetchScreenMetadataFromTMDB(tmdbId, type = null) {
         }
 
         // Fetch based on known type
-        const endpoint = type === 'movie' ? 'movie' : 'tv';
-        const response = await fetch(`${TMDB_BASE_URL}/${endpoint}/${tmdbId}?api_key=${apiKey}`);
+        if (type === 'movie') {
+            const response = await fetch(`${TMDB_BASE_URL}/movie/${tmdbId}?api_key=${apiKey}&append_to_response=credits`);
+            if (!response.ok) return null;
 
-        if (!response.ok) return null;
+            const data = await response.json();
 
-        const data = await response.json();
+            // Extract director from credits
+            let director = null;
+            if (data.credits && data.credits.crew) {
+                const directorObj = data.credits.crew.find(person => person.job === 'Director');
+                if (directorObj) {
+                    director = directorObj.name;
+                }
+            }
 
-        return {
-            type: type,
-            title: type === 'movie' ? data.title : data.name,
-            year: type === 'movie'
-                ? (data.release_date ? data.release_date.substring(0, 4) : '')
-                : (data.first_air_date ? data.first_air_date.substring(0, 4) : ''),
-            posterUrl: data.poster_path ? `${TMDB_IMAGE_BASE}/w300${data.poster_path}` : '',
-            overview: data.overview || ''
-        };
+            return {
+                type: type,
+                title: data.title,
+                director: director,
+                year: data.release_date ? data.release_date.substring(0, 4) : '',
+                posterUrl: data.poster_path ? `${TMDB_IMAGE_BASE}/w300${data.poster_path}` : '',
+                overview: data.overview || ''
+            };
+        } else {
+            // TV show
+            const response = await fetch(`${TMDB_BASE_URL}/tv/${tmdbId}?api_key=${apiKey}`);
+            if (!response.ok) return null;
+
+            const data = await response.json();
+
+            return {
+                type: type,
+                title: data.name,
+                director: null, // TV shows don't have a single director
+                year: data.first_air_date ? data.first_air_date.substring(0, 4) : '',
+                posterUrl: data.poster_path ? `${TMDB_IMAGE_BASE}/w300${data.poster_path}` : '',
+                overview: data.overview || ''
+            };
+        }
     } catch (error) {
         console.error('Error fetching metadata from TMDB:', error);
         return null;
@@ -2106,6 +2173,19 @@ async function fetchScreenMetadataFromTMDB(tmdbId, type = null) {
 async function tsvToScreens(tsv) {
     const lines = tsv.split('\n');
     if (lines.length < 2) return [];
+
+    // Check header to determine if this is old format (without director column) or new format
+    // TODO: Remove this migration logic in version 2.0.0 (added in v1.14.0)
+    const header = lines[0].trim();
+    const headerParts = header.split('\t');
+
+    // Old format: addedAt, finishedAt, tmdbID, lastWatchedEpisode, tags, title, year, posterURL, description (9 columns)
+    // New format: addedAt, finishedAt, tmdbID, lastWatchedEpisode, tags, title, director, year, posterURL, description (10 columns)
+    const isOldFormat = headerParts.length === 9;
+
+    if (isOldFormat) {
+        console.log('Detected old TSV format without director column - will migrate data');
+    }
 
     const screenPromises = [];
 
@@ -2131,13 +2211,28 @@ async function tsvToScreens(tsv) {
             const typeTag = tags.find(t => t === 'movie' || t === 'show');
             let internalType = typeTag === 'show' ? 'tv' : 'movie';
 
-            // Check if we need to fetch metadata (title, year, posterUrl, overview, or type)
-            let title = parts[5] || '';
-            let year = parts[6] || '';
-            let posterUrl = parts[7] || '';
-            let overview = parts[8] || '';
+            // Parse fields based on format
+            let title, director, year, posterUrl, overview;
 
-            const needsMetadata = !title || !year || !posterUrl || !overview || !typeTag;
+            if (isOldFormat) {
+                // Old format: title, year, posterURL, description
+                title = parts[5] || '';
+                director = ''; // Will be fetched from API if needed
+                year = parts[6] || '';
+                posterUrl = parts[7] || '';
+                overview = parts[8] || '';
+            } else {
+                // New format: title, director, year, posterURL, description
+                title = parts[5] || '';
+                director = parts[6] || '';
+                year = parts[7] || '';
+                posterUrl = parts[8] || '';
+                overview = parts[9] || '';
+            }
+
+            // Check if we need to fetch metadata (title, director (for movies), year, posterUrl, overview, or type)
+            const needsMetadata = !title || !year || !posterUrl || !overview || !typeTag ||
+                                  (internalType === 'movie' && !director);
 
             if (needsMetadata) {
                 // Fetch metadata from TMDB API
@@ -2147,6 +2242,7 @@ async function tsvToScreens(tsv) {
                     // Use API data for missing fields
                     if (!typeTag) internalType = metadata.type;
                     if (!title) title = metadata.title;
+                    if (!director && internalType === 'movie') director = metadata.director;
                     if (!year) year = metadata.year;
                     if (!posterUrl) posterUrl = metadata.posterUrl;
                     if (!overview) overview = metadata.overview;
@@ -2164,6 +2260,7 @@ async function tsvToScreens(tsv) {
                 tags: filteredTags,
                 type: internalType,
                 title: title,
+                director: internalType === 'movie' ? (director || null) : null,
                 year: year,
                 posterUrl: posterUrl,
                 overview: overview
